@@ -30,14 +30,36 @@ export const Route = createFileRoute("/admin")({
 
 const PW_KEY = "illy_admin_pw";
 const BOUNCE_SECONDS = 10;
+const TZ = "Asia/Dubai"; // Gulf Standard Time (UTC+4)
+const EXCLUDED_SESSION_IDS = new Set<string>([
+  "f67aa4c3-08f5-4dda-81e6-2749fb7d5faa", // synthetic debug session
+]);
+
+const dayFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+}); // yields YYYY-MM-DD in GST
+const dateTimeFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: TZ,
+  year: "numeric",
+  month: "short",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+const fmtDay = (iso: string) => dayFmt.format(new Date(iso));
+const fmtDateTime = (iso: string) => dateTimeFmt.format(new Date(iso));
 
 function AdminPage() {
   const [pw, setPw] = useState("");
   const [authed, setAuthed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [events, setEvents] = useState<Event[]>([]);
+  const [allSessions, setSessions] = useState<Session[]>([]);
+  const [allEvents, setEvents] = useState<Event[]>([]);
   const [days, setDays] = useState(30);
 
   async function load(password: string, daysBack = days) {
@@ -75,6 +97,9 @@ function AdminPage() {
   }, []);
 
   const stats = useMemo(() => {
+    const sessions = allSessions.filter((s) => !EXCLUDED_SESSION_IDS.has(s.id));
+    const events = allEvents.filter((e) => !EXCLUDED_SESSION_IDS.has(e.session_id));
+
     const pageLoads = events.filter((e) => e.event_type === "page_load");
     // "Click" metric = lightbox_open events (menu item opens)
     const clicks = events.filter((e) => e.event_type === "lightbox_open");
@@ -108,7 +133,7 @@ function AdminPage() {
     // page loads per day
     const byDay: Record<string, number> = {};
     for (const p of pageLoads) {
-      const d = new Date(p.created_at).toISOString().slice(0, 10);
+      const d = fmtDay(p.created_at);
       byDay[d] = (byDay[d] || 0) + 1;
     }
     const daySeries = Object.entries(byDay).sort(([a], [b]) =>
@@ -144,7 +169,9 @@ function AdminPage() {
       daySeries,
       topClicks,
     };
-  }, [sessions, events]);
+  }, [allSessions, allEvents]);
+
+  const sessions = allSessions.filter((s) => !EXCLUDED_SESSION_IDS.has(s.id));
 
   if (!authed) {
     return (
@@ -350,7 +377,7 @@ function AdminPage() {
                   return (
                     <tr key={s.id} className="border-t border-border">
                       <td className="py-2 whitespace-nowrap">
-                        {new Date(s.started_at).toLocaleString()}
+                        {fmtDateTime(s.started_at)}
                       </td>
                       <td className="py-2 tabular-nums">{sec}s</td>
                       <td
