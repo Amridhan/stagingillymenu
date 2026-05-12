@@ -76,7 +76,8 @@ function AdminPage() {
 
   const stats = useMemo(() => {
     const pageLoads = events.filter((e) => e.event_type === "page_load");
-    const clicks = events.filter((e) => e.event_type === "click");
+    // "Click" metric = lightbox_open events (menu item opens)
+    const clicks = events.filter((e) => e.event_type === "lightbox_open");
 
     // Sessions that opened at least one lightbox (menu item) — never bounces.
     const sessionsWithLightbox = new Set(
