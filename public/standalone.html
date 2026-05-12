@@ -566,10 +566,15 @@ document.addEventListener('visibilitychange', function() {
   function send(payload){
     try{
       var body = JSON.stringify(payload);
+      // Use text/plain so sendBeacon stays a CORS-safe simple request (no preflight).
+      // The server reads the raw body via request.json() regardless of Content-Type.
+      var blob = new Blob([body], {type:'text/plain;charset=UTF-8'});
+      var sent = false;
       if (navigator.sendBeacon) {
-        navigator.sendBeacon(ENDPOINT, new Blob([body], {type:'application/json'}));
-      } else {
-        fetch(ENDPOINT, {method:'POST', headers:{'Content-Type':'application/json'}, body:body, keepalive:true}).catch(function(){});
+        try { sent = navigator.sendBeacon(ENDPOINT, blob); } catch(e) { sent = false; }
+      }
+      if (!sent) {
+        fetch(ENDPOINT, {method:'POST', headers:{'Content-Type':'text/plain'}, body:body, keepalive:true}).catch(function(){});
       }
     }catch(e){}
   }

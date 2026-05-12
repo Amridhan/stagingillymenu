@@ -78,6 +78,13 @@ function AdminPage() {
     const pageLoads = events.filter((e) => e.event_type === "page_load");
     const clicks = events.filter((e) => e.event_type === "click");
 
+    // Sessions that opened at least one lightbox (menu item) — never bounces.
+    const sessionsWithLightbox = new Set(
+      events
+        .filter((e) => e.event_type === "lightbox_open")
+        .map((e) => e.session_id)
+    );
+
     // duration per session = last_event_at - started_at
     const durations = sessions.map((s) => {
       const ms =
@@ -88,7 +95,10 @@ function AdminPage() {
       durations.length > 0
         ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
         : 0;
-    const bounces = durations.filter((d) => d < BOUNCE_SECONDS).length;
+    // Bounce = under 10s AND no lightbox opened during the session.
+    const bounces = sessions.filter((s, i) => {
+      return durations[i] < BOUNCE_SECONDS && !sessionsWithLightbox.has(s.id);
+    }).length;
     const bounceRate =
       sessions.length > 0
         ? Math.round((bounces / sessions.length) * 1000) / 10
