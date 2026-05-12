@@ -163,6 +163,10 @@ function AdminPage() {
       totalPageLoads: pageLoads.length,
       totalSessions: sessions.length,
       totalClicks: clicks.length,
+      avgClicksPerSession:
+        sessions.length > 0
+          ? Math.round((clicks.length / sessions.length) * 10) / 10
+          : 0,
       avgTime,
       bounceRate,
       bounces,
