@@ -103,8 +103,8 @@ function AdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const stats = useMemo(() => {
-    const sessions = allSessions.filter((s) => !EXCLUDED_SESSION_IDS.has(s.id));
+  const { stats, sessions } = useMemo(() => {
+    const allSess = allSessions.filter((s) => !EXCLUDED_SESSION_IDS.has(s.id));
     const events = allEvents.filter((e) => !EXCLUDED_SESSION_IDS.has(e.session_id));
 
     const pageLoads = events.filter((e) => e.event_type === "page_load");
@@ -113,12 +113,29 @@ function AdminPage() {
 
     // Sessions that opened at least one lightbox (menu item) — never bounces.
     const sessionsWithLightbox = new Set(
-      events
-        .filter((e) => e.event_type === "lightbox_open")
-        .map((e) => e.session_id)
+      clicks.map((e) => e.session_id)
     );
 
-    // duration per session = last_event_at - started_at
+    // Identify bounced sessions: under threshold AND no lightbox opened.
+    // Bounced sessions are NOT counted as sessions anywhere.
+    const bouncedIds = new Set<string>();
+    for (const s of allSess) {
+      const sec = Math.max(
+        0,
+        Math.round(
+          (new Date(s.last_event_at).getTime() -
+            new Date(s.started_at).getTime()) /
+            1000
+        )
+      );
+      if (sec < BOUNCE_SECONDS && !sessionsWithLightbox.has(s.id)) {
+        bouncedIds.add(s.id);
+      }
+    }
+    const bounces = bouncedIds.size;
+    const sessions = allSess.filter((s) => !bouncedIds.has(s.id));
+
+    // duration per (non-bounced) session
     const durations = sessions.map((s) => {
       const ms =
         new Date(s.last_event_at).getTime() - new Date(s.started_at).getTime();
@@ -128,13 +145,9 @@ function AdminPage() {
       durations.length > 0
         ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
         : 0;
-    // Bounce = under 10s AND no lightbox opened during the session.
-    const bounces = sessions.filter((s, i) => {
-      return durations[i] < BOUNCE_SECONDS && !sessionsWithLightbox.has(s.id);
-    }).length;
     const bounceRate =
-      sessions.length > 0
-        ? Math.round((bounces / sessions.length) * 1000) / 10
+      allSess.length > 0
+        ? Math.round((bounces / allSess.length) * 1000) / 10
         : 0;
 
     // page loads per day
