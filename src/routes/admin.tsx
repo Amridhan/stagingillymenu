@@ -60,6 +60,39 @@ const dateTimeFmt = new Intl.DateTimeFormat("en-GB", {
 const fmtDay = (iso: string) => dayFmt.format(new Date(iso));
 const fmtDateTime = (iso: string) => dateTimeFmt.format(new Date(iso));
 
+const dowFmt = new Intl.DateTimeFormat("en-US", {
+  timeZone: TZ,
+  weekday: "short",
+});
+const dayOfWeek = (yyyymmdd: string) =>
+  dowFmt.format(new Date(`${yyyymmdd}T12:00:00Z`)); // UTC noon = 4pm GST, same date
+
+const hmFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: TZ,
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+const gstMinutesOfDay = (iso: string) => {
+  const [h, m] = hmFmt.format(new Date(iso)).split(":").map(Number);
+  return h * 60 + m;
+};
+
+const fmtMSS = (sec: number) => {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+};
+
+type Band = { label: string; test: (min: number) => boolean };
+const TIME_BANDS: Band[] = [
+  { label: "9:00am – 12:00pm",  test: (m) => m >= 540  && m < 720  },
+  { label: "12:00pm – 3:30pm",  test: (m) => m >= 720  && m < 930  },
+  { label: "3:30pm – 7:30pm",   test: (m) => m >= 930  && m < 1170 },
+  { label: "7:30pm – 10:30pm",  test: (m) => m >= 1170 && m < 1350 },
+  { label: "10:30pm – 12:30am", test: (m) => m >= 1350 || m < 30   },
+];
+
 function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -140,29 +173,82 @@ function AdminPage() {
         ? Math.round((bounces / allSess.length) * 1000) / 10
         : 0;
 
-    // page loads per day (all page_load events, including bounced)
+    // Helper: build metrics for a bucket given its sessions + bounced count + page loads.
+    const buildBucket = (
+      loads: number,
+      sessList: Session[],
+      bouncedCount: number
+    ) => {
+      const durs = sessList.map((s) =>
+        Math.max(
+          0,
+          Math.round(
+            (new Date(s.last_event_at).getTime() -
+              new Date(s.started_at).getTime()) /
+              1000
+          )
+        )
+      );
+      const avg =
+        durs.length > 0
+          ? Math.round(durs.reduce((a, b) => a + b, 0) / durs.length)
+          : 0;
+      const totalSess = sessList.length + bouncedCount;
+      const br =
+        totalSess > 0
+          ? Math.round((bouncedCount / totalSess) * 1000) / 10
+          : null;
+      return {
+        loads,
+        sessions: sessList.length,
+        avgTime: sessList.length > 0 ? avg : null,
+        bounceRate: br,
+      };
+    };
+
+    // ----- Per day -----
     const loadsByDay: Record<string, number> = {};
     for (const p of pageLoads) {
       const d = fmtDay(p.created_at);
       loadsByDay[d] = (loadsByDay[d] || 0) + 1;
     }
-    // sessions per day (non-bounced only, bucketed by started_at in GST)
-    const sessionsByDay: Record<string, number> = {};
+    const sessByDay: Record<string, Session[]> = {};
     for (const s of sessions) {
       const d = fmtDay(s.started_at);
-      sessionsByDay[d] = (sessionsByDay[d] || 0) + 1;
+      (sessByDay[d] ||= []).push(s);
+    }
+    const bouncedByDay: Record<string, number> = {};
+    for (const s of allSess) {
+      if (!bouncedIds.has(s.id)) continue;
+      const d = fmtDay(s.started_at);
+      bouncedByDay[d] = (bouncedByDay[d] || 0) + 1;
     }
     const allDays = new Set<string>([
       ...Object.keys(loadsByDay),
-      ...Object.keys(sessionsByDay),
+      ...Object.keys(sessByDay),
+      ...Object.keys(bouncedByDay),
     ]);
     const daySeries = Array.from(allDays)
       .sort((a, b) => (a < b ? 1 : -1))
       .map((d) => ({
         day: d,
-        loads: loadsByDay[d] || 0,
-        sessions: sessionsByDay[d] || 0,
+        dow: dayOfWeek(d),
+        ...buildBucket(loadsByDay[d] || 0, sessByDay[d] || [], bouncedByDay[d] || 0),
       }));
+
+    // ----- Per time band -----
+    const bandSeries = TIME_BANDS.map((b) => {
+      const loads = pageLoads.filter((p) =>
+        b.test(gstMinutesOfDay(p.created_at))
+      ).length;
+      const sessList = sessions.filter((s) =>
+        b.test(gstMinutesOfDay(s.started_at))
+      );
+      const bouncedCount = allSess.filter(
+        (s) => bouncedIds.has(s.id) && b.test(gstMinutesOfDay(s.started_at))
+      ).length;
+      return { label: b.label, ...buildBucket(loads, sessList, bouncedCount) };
+    });
 
     // top click targets
     const targetKey = (e: Event) => {
@@ -196,6 +282,7 @@ function AdminPage() {
         bounceRate,
         bounces,
         daySeries,
+        bandSeries,
         topClicks,
       },
       sessions,
@@ -249,7 +336,7 @@ function AdminPage() {
           <Stat label="Avg clicks / session" value={stats.avgClicksPerSession} sub={`${stats.totalClicks} total`} />
           <Stat
             label="Avg time on page"
-            value={`${stats.avgTime}s`}
+            value={fmtMSS(stats.avgTime)}
           />
           <Stat
             label="Bounce rate"
@@ -258,95 +345,106 @@ function AdminPage() {
           />
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-2">
-          <Card title="Per day">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-left text-muted-foreground">
+        <Card title="Per day">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-muted-foreground">
+                <tr>
+                  <th className="py-2">Date</th>
+                  <th className="py-2">Day</th>
+                  <th className="py-2 text-right">Page loads</th>
+                  <th className="py-2 text-right">Sessions</th>
+                  <th className="py-2 text-right">Avg time</th>
+                  <th className="py-2 text-right">Bounce rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.daySeries.length === 0 && (
                   <tr>
-                    <th className="py-2">Date</th>
-                    <th className="py-2 text-right">Page loads</th>
-                    <th className="py-2 text-right">Sessions</th>
-                    <th className="py-2">Bar</th>
+                    <td colSpan={6} className="py-4 text-muted-foreground">
+                      No data yet.
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {stats.daySeries.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="py-4 text-muted-foreground">
-                        No data yet.
-                      </td>
-                    </tr>
-                  )}
-                  {stats.daySeries.map((row) => {
-                    const max = Math.max(
-                      ...stats.daySeries.map((r) => r.loads)
-                    );
-                    const loadPct = max ? (row.loads / max) * 100 : 0;
-                    const sessPct = max ? (row.sessions / max) * 100 : 0;
-                    return (
-                      <tr key={row.day} className="border-t border-border">
-                        <td className="py-2">{row.day}</td>
-                        <td className="py-2 tabular-nums text-right">
-                          {row.loads}
-                        </td>
-                        <td className="py-2 tabular-nums text-right">
-                          {row.sessions}
-                        </td>
-                        <td className="py-2 w-1/2">
-                          <div className="space-y-1">
-                            <div className="h-2 rounded bg-muted">
-                              <div
-                                className="h-2 rounded bg-primary"
-                                style={{ width: `${loadPct}%` }}
-                              />
-                            </div>
-                            <div className="h-2 rounded bg-muted">
-                              <div
-                                className="h-2 rounded bg-accent-foreground/60"
-                                style={{ width: `${sessPct}%` }}
-                              />
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+                )}
+                {stats.daySeries.map((row) => (
+                  <tr key={row.day} className="border-t border-border">
+                    <td className="py-2 whitespace-nowrap">{row.day}</td>
+                    <td className="py-2 text-muted-foreground">{row.dow}</td>
+                    <td className="py-2 tabular-nums text-right">{row.loads}</td>
+                    <td className="py-2 tabular-nums text-right">{row.sessions}</td>
+                    <td className="py-2 tabular-nums text-right">
+                      {row.avgTime == null ? "—" : fmtMSS(row.avgTime)}
+                    </td>
+                    <td className="py-2 tabular-nums text-right">
+                      {row.bounceRate == null ? "—" : `${row.bounceRate}%`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
 
-          <Card title="Top clicked elements">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-left text-muted-foreground">
-                  <tr>
-                    <th className="py-2">Element</th>
-                    <th className="py-2 text-right">Clicks</th>
+        <Card title="By time of day (GST)">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-muted-foreground">
+                <tr>
+                  <th className="py-2">Time band</th>
+                  <th className="py-2 text-right">Page loads</th>
+                  <th className="py-2 text-right">Sessions</th>
+                  <th className="py-2 text-right">Avg time</th>
+                  <th className="py-2 text-right">Bounce rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.bandSeries.map((row) => (
+                  <tr key={row.label} className="border-t border-border">
+                    <td className="py-2 whitespace-nowrap">{row.label}</td>
+                    <td className="py-2 tabular-nums text-right">{row.loads}</td>
+                    <td className="py-2 tabular-nums text-right">{row.sessions}</td>
+                    <td className="py-2 tabular-nums text-right">
+                      {row.avgTime == null ? "—" : fmtMSS(row.avgTime)}
+                    </td>
+                    <td className="py-2 tabular-nums text-right">
+                      {row.bounceRate == null ? "—" : `${row.bounceRate}%`}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {stats.topClicks.length === 0 && (
-                    <tr>
-                      <td colSpan={2} className="py-4 text-muted-foreground">
-                        No clicks yet.
-                      </td>
-                    </tr>
-                  )}
-                  {stats.topClicks.map(([k, n]) => (
-                    <tr key={k} className="border-t border-border">
-                      <td className="py-2 truncate max-w-[420px]" title={k}>
-                        {k}
-                      </td>
-                      <td className="py-2 text-right tabular-nums">{n}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </section>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <Card title="Top clicked elements">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-muted-foreground">
+                <tr>
+                  <th className="py-2">Element</th>
+                  <th className="py-2 text-right">Clicks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.topClicks.length === 0 && (
+                  <tr>
+                    <td colSpan={2} className="py-4 text-muted-foreground">
+                      No clicks yet.
+                    </td>
+                  </tr>
+                )}
+                {stats.topClicks.map(([k, n]) => (
+                  <tr key={k} className="border-t border-border">
+                    <td className="py-2 truncate max-w-[420px]" title={k}>
+                      {k}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">{n}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
 
         <Card title="Recent sessions">
           <div className="overflow-x-auto">
