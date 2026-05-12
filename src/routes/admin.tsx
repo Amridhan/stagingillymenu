@@ -282,6 +282,7 @@ function AdminPage() {
         bounceRate,
         bounces,
         daySeries,
+        bandSeries,
         topClicks,
       },
       sessions,
