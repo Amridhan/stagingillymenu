@@ -97,6 +97,9 @@ function AdminPage() {
   }, []);
 
   const stats = useMemo(() => {
+    const sessions = allSessions.filter((s) => !EXCLUDED_SESSION_IDS.has(s.id));
+    const events = allEvents.filter((e) => !EXCLUDED_SESSION_IDS.has(e.session_id));
+
     const pageLoads = events.filter((e) => e.event_type === "page_load");
     // "Click" metric = lightbox_open events (menu item opens)
     const clicks = events.filter((e) => e.event_type === "lightbox_open");
