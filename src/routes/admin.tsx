@@ -163,6 +163,10 @@ function AdminPage() {
       totalPageLoads: pageLoads.length,
       totalSessions: sessions.length,
       totalClicks: clicks.length,
+      avgClicksPerSession:
+        sessions.length > 0
+          ? Math.round((clicks.length / sessions.length) * 10) / 10
+          : 0,
       avgTime,
       bounceRate,
       bounces,
@@ -264,7 +268,7 @@ function AdminPage() {
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <Stat label="Page loads" value={stats.totalPageLoads} />
           <Stat label="Sessions" value={stats.totalSessions} />
-          <Stat label="Total clicks" value={stats.totalClicks} />
+          <Stat label="Avg clicks / session" value={stats.avgClicksPerSession} sub={`${stats.totalClicks} total`} />
           <Stat
             label="Avg time on page"
             value={`${stats.avgTime}s`}
