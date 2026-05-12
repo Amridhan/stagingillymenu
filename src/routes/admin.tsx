@@ -28,7 +28,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-const PW_KEY = "illy_admin_pw";
+
 const BOUNCE_SECONDS = 10;
 const TZ = "Asia/Dubai"; // Gulf Standard Time (UTC+4)
 const EXCLUDED_SESSION_IDS = new Set<string>([
@@ -61,15 +61,13 @@ const fmtDay = (iso: string) => dayFmt.format(new Date(iso));
 const fmtDateTime = (iso: string) => dateTimeFmt.format(new Date(iso));
 
 function AdminPage() {
-  const [pw, setPw] = useState("");
-  const [authed, setAuthed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allSessions, setSessions] = useState<Session[]>([]);
   const [allEvents, setEvents] = useState<Event[]>([]);
   const [days, setDays] = useState(30);
 
-  async function load(password: string, daysBack = days) {
+  async function load(daysBack = days) {
     setLoading(true);
     setError(null);
     try {
@@ -77,29 +75,21 @@ function AdminPage() {
       const r = await fetch("/api/admin/stats", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, from }),
+        body: JSON.stringify({ from }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Failed");
       setSessions(j.sessions);
       setEvents(j.events);
-      setAuthed(true);
-      sessionStorage.setItem(PW_KEY, password);
     } catch (e) {
       setError((e as Error).message);
-      setAuthed(false);
-      sessionStorage.removeItem(PW_KEY);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    const saved = sessionStorage.getItem(PW_KEY);
-    if (saved) {
-      setPw(saved);
-      load(saved);
-    }
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -198,43 +188,6 @@ function AdminPage() {
     };
   }, [allSessions, allEvents]);
 
-  if (!authed) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-6">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            load(pw);
-          }}
-          className="w-full max-w-sm space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm"
-        >
-          <h1 className="text-xl font-semibold text-foreground">
-            Admin sign in
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Enter the shared admin password to view analytics.
-          </p>
-          <input
-            type="password"
-            value={pw}
-            onChange={(e) => setPw(e.target.value)}
-            placeholder="Password"
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
-            autoFocus
-          />
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading || !pw}
-            className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {loading ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background p-6 text-foreground">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -251,7 +204,7 @@ function AdminPage() {
               onChange={(e) => {
                 const d = Number(e.target.value);
                 setDays(d);
-                load(pw, d);
+                load(d);
               }}
               className="rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
@@ -262,20 +215,10 @@ function AdminPage() {
               <option value={365}>Last year</option>
             </select>
             <button
-              onClick={() => load(pw)}
+              onClick={() => load()}
               className="rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent"
             >
               {loading ? "…" : "Refresh"}
-            </button>
-            <button
-              onClick={() => {
-                sessionStorage.removeItem(PW_KEY);
-                setAuthed(false);
-                setPw("");
-              }}
-              className="rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent"
-            >
-              Sign out
             </button>
           </div>
         </header>

@@ -21,15 +21,10 @@ export const Route = createFileRoute("/api/admin/stats")({
     handlers: {
       POST: async ({ request }) => {
         try {
-          const body = (await request.json()) as {
-            password: string;
-            from?: string; // ISO date
+          const body = (await request.json().catch(() => ({}))) as {
+            from?: string;
             to?: string;
           };
-
-          if (!body.password || body.password !== process.env.ADMIN_PASSWORD) {
-            return json({ error: "Unauthorized" }, 401);
-          }
 
           const sb = admin();
           const from =
