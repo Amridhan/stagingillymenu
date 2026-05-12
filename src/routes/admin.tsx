@@ -173,29 +173,82 @@ function AdminPage() {
         ? Math.round((bounces / allSess.length) * 1000) / 10
         : 0;
 
-    // page loads per day (all page_load events, including bounced)
+    // Helper: build metrics for a bucket given its sessions + bounced count + page loads.
+    const buildBucket = (
+      loads: number,
+      sessList: Session[],
+      bouncedCount: number
+    ) => {
+      const durs = sessList.map((s) =>
+        Math.max(
+          0,
+          Math.round(
+            (new Date(s.last_event_at).getTime() -
+              new Date(s.started_at).getTime()) /
+              1000
+          )
+        )
+      );
+      const avg =
+        durs.length > 0
+          ? Math.round(durs.reduce((a, b) => a + b, 0) / durs.length)
+          : 0;
+      const totalSess = sessList.length + bouncedCount;
+      const br =
+        totalSess > 0
+          ? Math.round((bouncedCount / totalSess) * 1000) / 10
+          : null;
+      return {
+        loads,
+        sessions: sessList.length,
+        avgTime: sessList.length > 0 ? avg : null,
+        bounceRate: br,
+      };
+    };
+
+    // ----- Per day -----
     const loadsByDay: Record<string, number> = {};
     for (const p of pageLoads) {
       const d = fmtDay(p.created_at);
       loadsByDay[d] = (loadsByDay[d] || 0) + 1;
     }
-    // sessions per day (non-bounced only, bucketed by started_at in GST)
-    const sessionsByDay: Record<string, number> = {};
+    const sessByDay: Record<string, Session[]> = {};
     for (const s of sessions) {
       const d = fmtDay(s.started_at);
-      sessionsByDay[d] = (sessionsByDay[d] || 0) + 1;
+      (sessByDay[d] ||= []).push(s);
+    }
+    const bouncedByDay: Record<string, number> = {};
+    for (const s of allSess) {
+      if (!bouncedIds.has(s.id)) continue;
+      const d = fmtDay(s.started_at);
+      bouncedByDay[d] = (bouncedByDay[d] || 0) + 1;
     }
     const allDays = new Set<string>([
       ...Object.keys(loadsByDay),
-      ...Object.keys(sessionsByDay),
+      ...Object.keys(sessByDay),
+      ...Object.keys(bouncedByDay),
     ]);
     const daySeries = Array.from(allDays)
       .sort((a, b) => (a < b ? 1 : -1))
       .map((d) => ({
         day: d,
-        loads: loadsByDay[d] || 0,
-        sessions: sessionsByDay[d] || 0,
+        dow: dayOfWeek(d),
+        ...buildBucket(loadsByDay[d] || 0, sessByDay[d] || [], bouncedByDay[d] || 0),
       }));
+
+    // ----- Per time band -----
+    const bandSeries = TIME_BANDS.map((b) => {
+      const loads = pageLoads.filter((p) =>
+        b.test(gstMinutesOfDay(p.created_at))
+      ).length;
+      const sessList = sessions.filter((s) =>
+        b.test(gstMinutesOfDay(s.started_at))
+      );
+      const bouncedCount = allSess.filter(
+        (s) => bouncedIds.has(s.id) && b.test(gstMinutesOfDay(s.started_at))
+      ).length;
+      return { label: b.label, ...buildBucket(loads, sessList, bouncedCount) };
+    });
 
     // top click targets
     const targetKey = (e: Event) => {
