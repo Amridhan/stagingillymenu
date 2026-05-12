@@ -180,22 +180,23 @@ function AdminPage() {
       .slice(0, 25);
 
     return {
-      totalPageLoads: pageLoads.length,
-      totalSessions: sessions.length,
-      totalClicks: clicks.length,
-      avgClicksPerSession:
-        sessions.length > 0
-          ? Math.round((clicks.length / sessions.length) * 10) / 10
-          : 0,
-      avgTime,
-      bounceRate,
-      bounces,
-      daySeries,
-      topClicks,
+      stats: {
+        totalPageLoads: pageLoads.length,
+        totalSessions: sessions.length,
+        totalClicks: clicks.length,
+        avgClicksPerSession:
+          sessions.length > 0
+            ? Math.round((clicks.length / sessions.length) * 10) / 10
+            : 0,
+        avgTime,
+        bounceRate,
+        bounces,
+        daySeries,
+        topClicks,
+      },
+      sessions,
     };
   }, [allSessions, allEvents]);
-
-  const sessions = allSessions.filter((s) => !EXCLUDED_SESSION_IDS.has(s.id));
 
   if (!authed) {
     return (
