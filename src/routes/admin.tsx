@@ -33,6 +33,13 @@ const BOUNCE_SECONDS = 10;
 const TZ = "Asia/Dubai"; // Gulf Standard Time (UTC+4)
 const EXCLUDED_SESSION_IDS = new Set<string>([
   "f67aa4c3-08f5-4dda-81e6-2749fb7d5faa", // synthetic debug session
+  "b8bb10c9-977a-46b0-b29d-d7140b913cdd",
+  "75075df0-286e-440e-a56d-da352622f0fb",
+  "25e67c8a-89ca-4ee1-9384-6157ce0d9bd1",
+  "8be0256a-0e71-491e-9a4d-d2890f1ccb47",
+  "040b8319-fd5c-470e-b4f9-813c5b9a6f38",
+  "173b9e63-9a7f-43ff-89cf-eebccf6e4701",
+  "9e974077-1a82-4f4e-b484-ea72e98ecf42",
 ]);
 
 const dayFmt = new Intl.DateTimeFormat("en-CA", {
