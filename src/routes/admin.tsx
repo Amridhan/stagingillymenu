@@ -133,7 +133,7 @@ function AdminPage() {
     // page loads per day
     const byDay: Record<string, number> = {};
     for (const p of pageLoads) {
-      const d = new Date(p.created_at).toISOString().slice(0, 10);
+      const d = fmtDay(p.created_at);
       byDay[d] = (byDay[d] || 0) + 1;
     }
     const daySeries = Object.entries(byDay).sort(([a], [b]) =>
