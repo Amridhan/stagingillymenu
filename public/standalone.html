@@ -414,6 +414,7 @@ function oLb(i){
   var lbEl=document.getElementById('lb');
   lbEl.classList.add('open');
   document.body.style.overflow='hidden';
+  try{ if(window.__trackLightbox) window.__trackLightbox(d.name, d.sub, i); }catch(e){}
 }
 function cLb(){document.getElementById('lb').classList.remove('open');document.body.style.overflow='';}
 function cLbBg(e){if(e.target===document.getElementById('lb'))cLb();}
