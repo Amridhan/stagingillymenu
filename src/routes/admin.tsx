@@ -455,7 +455,7 @@ function AdminPage() {
                   <th className="py-2">Duration</th>
                   <th className="py-2">Referrer</th>
                   <th className="py-2">Screen</th>
-                  <th className="py-2">Lang</th>
+                  
                   <th className="py-2">User agent</th>
                 </tr>
               </thead>
