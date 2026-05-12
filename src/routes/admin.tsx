@@ -455,7 +455,7 @@ function AdminPage() {
                   <th className="py-2">Duration</th>
                   <th className="py-2">Referrer</th>
                   <th className="py-2">Screen</th>
-                  <th className="py-2">Lang</th>
+                  
                   <th className="py-2">User agent</th>
                 </tr>
               </thead>
@@ -482,7 +482,7 @@ function AdminPage() {
                         {s.referrer || "—"}
                       </td>
                       <td className="py-2">{s.screen || "—"}</td>
-                      <td className="py-2">{s.language || "—"}</td>
+                      
                       <td
                         className="py-2 truncate max-w-[300px]"
                         title={s.user_agent || ""}
