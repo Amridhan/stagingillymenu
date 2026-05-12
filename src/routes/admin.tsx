@@ -140,15 +140,29 @@ function AdminPage() {
         ? Math.round((bounces / allSess.length) * 1000) / 10
         : 0;
 
-    // page loads per day
-    const byDay: Record<string, number> = {};
+    // page loads per day (all page_load events, including bounced)
+    const loadsByDay: Record<string, number> = {};
     for (const p of pageLoads) {
       const d = fmtDay(p.created_at);
-      byDay[d] = (byDay[d] || 0) + 1;
+      loadsByDay[d] = (loadsByDay[d] || 0) + 1;
     }
-    const daySeries = Object.entries(byDay).sort(([a], [b]) =>
-      a < b ? 1 : -1
-    );
+    // sessions per day (non-bounced only, bucketed by started_at in GST)
+    const sessionsByDay: Record<string, number> = {};
+    for (const s of sessions) {
+      const d = fmtDay(s.started_at);
+      sessionsByDay[d] = (sessionsByDay[d] || 0) + 1;
+    }
+    const allDays = new Set<string>([
+      ...Object.keys(loadsByDay),
+      ...Object.keys(sessionsByDay),
+    ]);
+    const daySeries = Array.from(allDays)
+      .sort((a, b) => (a < b ? 1 : -1))
+      .map((d) => ({
+        day: d,
+        loads: loadsByDay[d] || 0,
+        sessions: sessionsByDay[d] || 0,
+      }));
 
     // top click targets
     const targetKey = (e: Event) => {
