@@ -547,6 +547,79 @@ document.addEventListener('visibilitychange', function() {
   });
   timer = setTimeout(doClose, 7000);
 })();
+
+/* ===== Analytics tracking ===== */
+(function(){
+  var ENDPOINT = 'https://project--5e4e3e03-b49f-4efb-93bd-8198174d85d7.lovable.app/api/public/track';
+  var sessionId = null;
+  var queue = [];
+
+  function send(payload){
+    try{
+      var body = JSON.stringify(payload);
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(ENDPOINT, new Blob([body], {type:'application/json'}));
+      } else {
+        fetch(ENDPOINT, {method:'POST', headers:{'Content-Type':'application/json'}, body:body, keepalive:true}).catch(function(){});
+      }
+    }catch(e){}
+  }
+
+  function start(){
+    fetch(ENDPOINT, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        action:'start',
+        user_agent: navigator.userAgent,
+        referrer: document.referrer || null,
+        screen: window.screen.width + 'x' + window.screen.height,
+        language: navigator.language,
+        path: location.pathname + location.search
+      })
+    }).then(function(r){return r.json();}).then(function(j){
+      sessionId = j.session_id;
+      // flush any queued clicks
+      queue.forEach(function(p){ p.session_id = sessionId; send(p); });
+      queue = [];
+    }).catch(function(){});
+  }
+
+  function track(ev){
+    var t = ev.target;
+    if (!t || t.nodeType !== 1) return;
+    var payload = {
+      action:'event',
+      session_id: sessionId,
+      event_type:'click',
+      target_tag: (t.tagName||'').toLowerCase(),
+      target_id: t.id || null,
+      target_class: (typeof t.className === 'string' ? t.className : '') || null,
+      target_text: (t.innerText || t.textContent || '').trim().slice(0, 200),
+      path: location.pathname + location.search
+    };
+    if (!sessionId) { queue.push(payload); return; }
+    send(payload);
+  }
+
+  // Heartbeat to keep last_event_at fresh while user is on page
+  var hb = setInterval(function(){
+    if (sessionId && !document.hidden) {
+      send({action:'heartbeat', session_id: sessionId});
+    }
+  }, 15000);
+
+  // Final beacon on unload so duration is accurate
+  window.addEventListener('pagehide', function(){
+    if (sessionId) send({action:'heartbeat', session_id: sessionId});
+  });
+  window.addEventListener('visibilitychange', function(){
+    if (document.hidden && sessionId) send({action:'heartbeat', session_id: sessionId});
+  });
+
+  document.addEventListener('click', track, true);
+  start();
+})();
 </script>
 </body>
 </html>
