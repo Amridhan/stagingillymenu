@@ -47,22 +47,46 @@ export const Route = createFileRoute("/api/public/track")({
           const sb = admin();
 
           if (body.action === "start") {
+            const user_agent = body.user_agent?.slice(0, 500) ?? null;
+            const referrer = body.referrer?.slice(0, 500) ?? null;
+            const screen = body.screen?.slice(0, 50) ?? null;
+            const language = body.language?.slice(0, 20) ?? null;
+            const path = body.path?.slice(0, 500) ?? null;
+            const recentSince = new Date(Date.now() - 30_000).toISOString();
+
+            let existingQuery = sb
+              .from("analytics_sessions")
+              .select("id")
+              .gte("started_at", recentSince)
+              .eq("user_agent", user_agent)
+              .eq("screen", screen)
+              .eq("language", language)
+              .order("started_at", { ascending: false })
+              .limit(1);
+
+            existingQuery = referrer === null ? existingQuery.is("referrer", null) : existingQuery.eq("referrer", referrer);
+
+            const { data: existing, error: existingError } = await existingQuery.maybeSingle();
+            if (existingError) return json({ error: existingError.message }, 500);
+            if (existing?.id) {
+              await sb
+                .from("analytics_sessions")
+                .update({ last_event_at: new Date().toISOString() })
+                .eq("id", existing.id);
+              return json({ session_id: existing.id, deduped: true });
+            }
+
             const { data, error } = await sb
               .from("analytics_sessions")
-              .insert({
-                user_agent: body.user_agent?.slice(0, 500),
-                referrer: body.referrer?.slice(0, 500),
-                screen: body.screen?.slice(0, 50),
-                language: body.language?.slice(0, 20),
-              })
+              .insert({ user_agent, referrer, screen, language })
               .select("id")
               .single();
             if (error) return json({ error: error.message }, 500);
-            // Also log a page_load event
+            // Also log a page_load event, once for this created session.
             await sb.from("analytics_events").insert({
               session_id: data.id,
               event_type: "page_load",
-              path: body.path?.slice(0, 500),
+              path,
             });
             return json({ session_id: data.id });
           }
