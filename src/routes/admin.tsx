@@ -269,6 +269,89 @@ function AdminPage() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 25);
 
+    // ---- New event types ----
+    const nonExcluded = (e: Event) => !EXCLUDED_SESSION_IDS.has(e.session_id);
+    const scrollEvents = events.filter((e) => e.event_type === "scroll_depth" && nonExcluded(e));
+    const hoverEvents = events.filter((e) => e.event_type === "hover" && nonExcluded(e));
+    const sectionEvents = events.filter((e) => e.event_type === "section_view" && nonExcluded(e));
+    const timeEvents = events.filter((e) => e.event_type === "time_on_page" && nonExcluded(e));
+    const closeEvents = events.filter((e) => e.event_type === "lightbox_close" && nonExcluded(e));
+
+    // Scroll depth: % of sessions that reached each threshold
+    const scrollByThreshold: Record<string, Set<string>> = { "25": new Set(), "50": new Set(), "75": new Set(), "100": new Set() };
+    for (const e of scrollEvents) {
+      const t = e.target_id || "";
+      if (scrollByThreshold[t]) scrollByThreshold[t].add(e.session_id);
+    }
+    const scrollDepth = ["25", "50", "75", "100"].map((t) => ({
+      threshold: t,
+      sessions: scrollByThreshold[t].size,
+      pct: sessions.length > 0
+        ? Math.round((scrollByThreshold[t].size / sessions.length) * 1000) / 10
+        : 0,
+    }));
+
+    // Top hovered items (dwell ≥500ms, deduped per session)
+    const hoverCounts: Record<string, number> = {};
+    for (const e of hoverEvents) {
+      const k = (e.target_text || "?").trim().slice(0, 60);
+      hoverCounts[k] = (hoverCounts[k] || 0) + 1;
+    }
+    const topHovers = Object.entries(hoverCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 25);
+
+    // Section views — sessions per section
+    const sectionByKey: Record<string, { title: string; sessions: Set<string> }> = {};
+    for (const e of sectionEvents) {
+      const id = e.target_id || "?";
+      if (!sectionByKey[id]) sectionByKey[id] = { title: e.target_text || id, sessions: new Set() };
+      sectionByKey[id].sessions.add(e.session_id);
+    }
+    const sectionSeries = Object.entries(sectionByKey)
+      .map(([id, v]) => ({
+        id,
+        title: v.title,
+        sessions: v.sessions.size,
+        pct: sessions.length > 0
+          ? Math.round((v.sessions.size / sessions.length) * 1000) / 10
+          : 0,
+      }))
+      .sort((a, b) => b.sessions - a.sessions);
+
+    // Real time on page (from time_on_page events). Use the largest reading per session.
+    const timePerSession: Record<string, number> = {};
+    for (const e of timeEvents) {
+      const ms = (e.data as { ms?: number } | null)?.ms ?? 0;
+      if (!timePerSession[e.session_id] || ms > timePerSession[e.session_id]) {
+        timePerSession[e.session_id] = ms;
+      }
+    }
+    const timeValues = Object.values(timePerSession);
+    const realAvgTime = timeValues.length > 0
+      ? Math.round(timeValues.reduce((a, b) => a + b, 0) / timeValues.length / 1000)
+      : 0;
+
+    // Avg lightbox dwell (per item + overall)
+    const dwellByItem: Record<string, { name: string; total: number; n: number }> = {};
+    let dwellTotal = 0;
+    let dwellN = 0;
+    for (const e of closeEvents) {
+      const ms = (e.data as { dwell_ms?: number } | null)?.dwell_ms ?? 0;
+      if (ms <= 0) continue;
+      dwellTotal += ms;
+      dwellN += 1;
+      const k = (e.target_text || "?").trim().slice(0, 60);
+      if (!dwellByItem[k]) dwellByItem[k] = { name: k, total: 0, n: 0 };
+      dwellByItem[k].total += ms;
+      dwellByItem[k].n += 1;
+    }
+    const avgLightboxDwell = dwellN > 0 ? Math.round(dwellTotal / dwellN / 1000) : 0;
+    const topDwell = Object.values(dwellByItem)
+      .map((d) => ({ name: d.name, avgSec: Math.round(d.total / d.n / 1000), opens: d.n }))
+      .sort((a, b) => b.avgSec - a.avgSec)
+      .slice(0, 25);
+
     return {
       stats: {
         totalPageLoads: pageLoads.length,
@@ -279,11 +362,17 @@ function AdminPage() {
             ? Math.round((clicks.length / sessions.length) * 10) / 10
             : 0,
         avgTime,
+        realAvgTime,
+        avgLightboxDwell,
         bounceRate,
         bounces,
         daySeries,
         bandSeries,
         topClicks,
+        scrollDepth,
+        topHovers,
+        sectionSeries,
+        topDwell,
       },
       sessions,
     };
