@@ -510,7 +510,7 @@ function AdminPage() {
           </div>
         </Card>
 
-        <Card title="Top hovered items (≥500ms dwell, deduped per session)">
+        <Card title="Top hovered items (≥1s dwell, deduped per session)">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-muted-foreground">
