@@ -416,121 +416,6 @@ function AdminPage() {
           />
         </section>
 
-        <Card title="Scroll depth (sessions reaching threshold)">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-muted-foreground">
-                <tr>
-                  <th className="py-2">Threshold</th>
-                  <th className="py-2 text-right">Sessions</th>
-                  <th className="py-2 text-right">% of sessions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.scrollDepth.map((r) => (
-                  <tr key={r.threshold} className="border-t border-border">
-                    <td className="py-2">{r.threshold}%</td>
-                    <td className="py-2 text-right tabular-nums">{r.sessions}</td>
-                    <td className="py-2 text-right tabular-nums">{r.pct}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        <Card title="Section views (≥50% visible for ≥1s, deduped per session)">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-muted-foreground">
-                <tr>
-                  <th className="py-2">Section</th>
-                  <th className="py-2 text-right">Sessions</th>
-                  <th className="py-2 text-right">% of sessions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.sectionSeries.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="py-4 text-muted-foreground">
-                      No section views yet.
-                    </td>
-                  </tr>
-                )}
-                {stats.sectionSeries.map((r) => (
-                  <tr key={r.id} className="border-t border-border">
-                    <td className="py-2">{r.title}</td>
-                    <td className="py-2 text-right tabular-nums">{r.sessions}</td>
-                    <td className="py-2 text-right tabular-nums">{r.pct}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        <Card title="Top hovered items (≥500ms dwell, deduped per session)">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-muted-foreground">
-                <tr>
-                  <th className="py-2">Item</th>
-                  <th className="py-2 text-right">Hovers</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.topHovers.length === 0 && (
-                  <tr>
-                    <td colSpan={2} className="py-4 text-muted-foreground">
-                      No hovers yet (touch devices have no hover).
-                    </td>
-                  </tr>
-                )}
-                {stats.topHovers.map(([k, n]) => (
-                  <tr key={k} className="border-t border-border">
-                    <td className="py-2 truncate max-w-[420px]" title={k}>
-                      {k}
-                    </td>
-                    <td className="py-2 text-right tabular-nums">{n}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        <Card title="Lightbox dwell — top items by avg time inside popup">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-muted-foreground">
-                <tr>
-                  <th className="py-2">Item</th>
-                  <th className="py-2 text-right">Avg dwell</th>
-                  <th className="py-2 text-right">Opens</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.topDwell.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="py-4 text-muted-foreground">
-                      No lightbox closes yet.
-                    </td>
-                  </tr>
-                )}
-                {stats.topDwell.map((r) => (
-                  <tr key={r.name} className="border-t border-border">
-                    <td className="py-2 truncate max-w-[420px]" title={r.name}>
-                      {r.name}
-                    </td>
-                    <td className="py-2 text-right tabular-nums">{fmtMSS(r.avgSec)}</td>
-                    <td className="py-2 text-right tabular-nums">{r.opens}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
         <Card title="Per day">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -602,7 +487,69 @@ function AdminPage() {
           </div>
         </Card>
 
-        <Card title="Top clicked elements">
+        <Card title="Top hovered items (≥500ms dwell, deduped per session)">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-muted-foreground">
+                <tr>
+                  <th className="py-2">Item</th>
+                  <th className="py-2 text-right">Hovers</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.topHovers.length === 0 && (
+                  <tr>
+                    <td colSpan={2} className="py-4 text-muted-foreground">
+                      No hovers yet (touch devices have no hover).
+                    </td>
+                  </tr>
+                )}
+                {stats.topHovers.map(([k, n]) => (
+                  <tr key={k} className="border-t border-border">
+                    <td className="py-2 truncate max-w-[420px]" title={k}>
+                      {k}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">{n}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <Card title="Lightbox dwell — top items by avg time inside popup">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-muted-foreground">
+                <tr>
+                  <th className="py-2">Item</th>
+                  <th className="py-2 text-right">Avg dwell</th>
+                  <th className="py-2 text-right">Opens</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.topDwell.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="py-4 text-muted-foreground">
+                      No lightbox closes yet.
+                    </td>
+                  </tr>
+                )}
+                {stats.topDwell.map((r) => (
+                  <tr key={r.name} className="border-t border-border">
+                    <td className="py-2 truncate max-w-[420px]" title={r.name}>
+                      {r.name}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">{fmtMSS(r.avgSec)}</td>
+                    <td className="py-2 text-right tabular-nums">{r.opens}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <Card title="Top clicked items">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-muted-foreground">
