@@ -77,6 +77,23 @@ const gstMinutesOfDay = (iso: string) => {
   return h * 60 + m;
 };
 
+const isWeekendISO = (iso: string) => {
+  const d = dowFmt.format(new Date(iso));
+  return d === "Sat" || d === "Sun";
+};
+
+// Local date string -> ISO at start/end of GST day. We treat the date input as GST.
+// GST is UTC+4, so "YYYY-MM-DD 00:00 GST" = "YYYY-MM-DDT00:00:00-04:00" in ISO form
+// using the offset ... but simpler: build a UTC time and shift by -4h.
+const gstDateToISO = (yyyymmdd: string, endOfDay = false) => {
+  const [y, m, d] = yyyymmdd.split("-").map(Number);
+  const utcMs = Date.UTC(y, m - 1, d, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0);
+  // GST is UTC+4, so 00:00 GST = previous day 20:00 UTC
+  return new Date(utcMs - 4 * 3600 * 1000).toISOString();
+};
+
+const todayGST = () => dayFmt.format(new Date());
+
 const fmtMSS = (sec: number) => {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
