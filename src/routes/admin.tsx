@@ -30,6 +30,7 @@ export const Route = createFileRoute("/admin")({
 
 
 const BOUNCE_SECONDS = 10;
+const SESSION_MERGE_WINDOW_MS = 30 * 60 * 1000;
 const TZ = "Asia/Dubai"; // Gulf Standard Time (UTC+4)
 const EXCLUDED_SESSION_IDS = new Set<string>([
   "f67aa4c3-08f5-4dda-81e6-2749fb7d5faa", // synthetic debug session
@@ -85,6 +86,7 @@ const fmtMSS = (sec: number) => {
 };
 
 type Band = { label: string; test: (min: number) => boolean };
+type Visit = Session & { ids: string[] };
 const TIME_BANDS: Band[] = [
   { label: "9:00am – 12:00pm",  test: (m) => m >= 540  && m < 720  },
   { label: "12:00pm – 3:30pm",  test: (m) => m >= 720  && m < 930  },
