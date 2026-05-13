@@ -401,8 +401,8 @@ function AdminPage() {
           />
           <Stat
             label="Avg time on page"
-            value={fmtMSS(stats.realAvgTime)}
-            sub={stats.realAvgTime ? "from time_on_page" : "no data yet"}
+            value={fmtMSS(stats.avgTimeOnPage)}
+            sub={stats.avgTimeOnPage ? "from time_on_page" : "no data yet"}
           />
           <Stat
             label="Bounce rate"
@@ -413,11 +413,6 @@ function AdminPage() {
             label="Avg lightbox dwell"
             value={fmtMSS(stats.avgLightboxDwell)}
             sub="time inside popups"
-          />
-          <Stat
-            label="Avg time (last event − first)"
-            value={fmtMSS(stats.avgTime)}
-            sub="legacy heuristic"
           />
         </section>
 
