@@ -259,7 +259,7 @@ function AdminPage() {
     for (const e of scrollEvents) {
       const t = e.target_id || "";
       if (scrollByThreshold[t])
-        scrollByThreshold[t].add(sessionToVisit.get(e.session_id) || e.session_id);
+        scrollByThreshold[t].add(e.session_id);
     }
     const scrollDepth = ["25", "50", "75", "100"].map((t) => ({
       threshold: t,
@@ -285,7 +285,7 @@ function AdminPage() {
     for (const e of sectionEvents) {
       const id = e.target_id || "?";
       if (!sectionByKey[id]) sectionByKey[id] = { title: e.target_text || id, sessions: new Set() };
-      sectionByKey[id].sessions.add(sessionToVisit.get(e.session_id) || e.session_id);
+      sectionByKey[id].sessions.add(e.session_id);
     }
     const sectionSeries = Object.entries(sectionByKey)
       .map(([id, v]) => ({
@@ -300,7 +300,7 @@ function AdminPage() {
     const timePerSession: Record<string, number> = {};
     for (const e of timeEvents) {
       const ms = (e.data as { ms?: number } | null)?.ms ?? 0;
-      const visitId = sessionToVisit.get(e.session_id) || e.session_id;
+      const visitId = e.session_id;
       if (!timePerSession[visitId] || ms > timePerSession[visitId]) {
         timePerSession[visitId] = ms;
       }
