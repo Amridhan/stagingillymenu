@@ -195,8 +195,11 @@ function AdminPage() {
   const { stats, sessions, sessionDuration } = useMemo(() => {
     const matchesDayFilter = (iso: string) => {
       if (dayFilter === "all") return true;
-      const wknd = isWeekendISO(iso);
-      return dayFilter === "weekends" ? wknd : !wknd;
+      if (dayFilter === "weekdays" || dayFilter === "weekends") {
+        const wknd = isWeekendISO(iso);
+        return dayFilter === "weekends" ? wknd : !wknd;
+      }
+      return dowFmt.format(new Date(iso)) === dayFilter;
     };
     const visits = allSessions.filter(
       (s) => !EXCLUDED_SESSION_IDS.has(s.id) && matchesDayFilter(s.started_at),
