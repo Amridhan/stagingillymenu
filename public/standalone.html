@@ -577,30 +577,8 @@ document.addEventListener('visibilitychange', function() {
   if (isLocal || isPreview) return;
 
   var ENDPOINT = 'https://project--5e4e3e03-b49f-4efb-93bd-8198174d85d7.lovable.app/api/public/track';
-  var SESSION_KEY = 'aycillymenu.analytics.session.v1';
-  var SESSION_TTL = 30 * 60 * 1000;
   var sessionId = null;
   var queue = [];
-
-  function readStoredSession(){
-    try{
-      var raw = localStorage.getItem(SESSION_KEY);
-      if (!raw) return null;
-      var stored = JSON.parse(raw);
-      if (!stored || !stored.id || !stored.lastSeen) return null;
-      if (Date.now() - stored.lastSeen > SESSION_TTL) {
-        localStorage.removeItem(SESSION_KEY);
-        return null;
-      }
-      return stored;
-    }catch(e){ return null; }
-  }
-
-  function saveStoredSession(id){
-    try{
-      localStorage.setItem(SESSION_KEY, JSON.stringify({ id: id, lastSeen: Date.now() }));
-    }catch(e){}
-  }
 
   function flushQueue(){
     queue.forEach(function(p){ p.session_id = sessionId; send(p); });
@@ -624,14 +602,6 @@ document.addEventListener('visibilitychange', function() {
   }
 
   function start(){
-    var stored = readStoredSession();
-    if (stored) {
-      sessionId = stored.id;
-      saveStoredSession(sessionId);
-      flushQueue();
-      send({action:'heartbeat', session_id: sessionId});
-      return;
-    }
     fetch(ENDPOINT, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -645,7 +615,6 @@ document.addEventListener('visibilitychange', function() {
       })
     }).then(function(r){return r.json();}).then(function(j){
       sessionId = j.session_id;
-      saveStoredSession(sessionId);
       flushQueue();
     }).catch(function(){});
   }
@@ -656,7 +625,6 @@ document.addEventListener('visibilitychange', function() {
     payload.path = location.pathname + location.search;
     if (!sessionId) { queue.push(payload); return; }
     payload.session_id = sessionId;
-    saveStoredSession(sessionId);
     send(payload);
   }
 
@@ -780,19 +748,19 @@ document.addEventListener('visibilitychange', function() {
 
   // Heartbeat to keep last_event_at fresh while the user is on the page
   setInterval(function(){
-    if (sessionId && !document.hidden) { saveStoredSession(sessionId); send({action:'heartbeat', session_id: sessionId}); }
+    if (sessionId && !document.hidden) { send({action:'heartbeat', session_id: sessionId}); }
   }, 15000);
 
   window.addEventListener('pagehide', function(){
     flushTime();
-    if (sessionId) { saveStoredSession(sessionId); send({action:'heartbeat', session_id: sessionId}); }
+    if (sessionId) { send({action:'heartbeat', session_id: sessionId}); }
   });
   window.addEventListener('beforeunload', flushTime);
   window.addEventListener('visibilitychange', function(){
     if (document.hidden){
       totalVisibleMs += Date.now() - visibleSince;
       flushTime();
-      if (sessionId) { saveStoredSession(sessionId); send({action:'heartbeat', session_id: sessionId}); }
+      if (sessionId) { send({action:'heartbeat', session_id: sessionId}); }
     } else {
       visibleSince = Date.now();
       timeReported = false; // allow another flush if they come back and leave again

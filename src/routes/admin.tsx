@@ -29,7 +29,7 @@ export const Route = createFileRoute("/admin")({
 });
 
 const BOUNCE_SECONDS = 10;
-const SESSION_MERGE_WINDOW_MS = 30 * 60 * 1000;
+
 const TZ = "Asia/Dubai"; // Gulf Standard Time (UTC+4)
 const EXCLUDED_SESSION_IDS = new Set<string>([
   "f67aa4c3-08f5-4dda-81e6-2749fb7d5faa", // synthetic debug session
@@ -84,7 +84,7 @@ const fmtMSS = (sec: number) => {
 };
 
 type Band = { label: string; test: (min: number) => boolean };
-type Visit = Session & { ids: string[] };
+
 const TIME_BANDS: Band[] = [
   { label: "9:00am – 12:00pm", test: (m) => m >= 540 && m < 720 },
   { label: "12:00pm – 3:30pm", test: (m) => m >= 720 && m < 930 },
@@ -127,50 +127,15 @@ function AdminPage() {
   }, []);
 
   const { stats, sessions } = useMemo(() => {
-    const allSess = allSessions.filter((s) => !EXCLUDED_SESSION_IDS.has(s.id));
+    const visits = allSessions.filter((s) => !EXCLUDED_SESSION_IDS.has(s.id));
     const events = allEvents.filter((e) => !EXCLUDED_SESSION_IDS.has(e.session_id));
-    const sessionToVisit = new Map<string, string>();
-    const mergeKey = (s: Session) => `${s.screen || ""}|${s.language || ""}|${s.user_agent || ""}`;
-    const visits: Visit[] = [];
-    const lastVisitByKey = new Map<string, Visit>();
-    for (const s of [...allSess].sort(
-      (a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime(),
-    )) {
-      const key = mergeKey(s);
-      const last = lastVisitByKey.get(key);
-      const gap = last
-        ? new Date(s.started_at).getTime() - new Date(last.last_event_at).getTime()
-        : Infinity;
-      if (last && gap >= 0 && gap <= SESSION_MERGE_WINDOW_MS) {
-        last.ids.push(s.id);
-        if (new Date(s.last_event_at).getTime() > new Date(last.last_event_at).getTime()) {
-          last.last_event_at = s.last_event_at;
-        }
-        for (const id of last.ids) sessionToVisit.set(id, last.id);
-      } else {
-        const visit = { ...s, ids: [s.id] };
-        visits.push(visit);
-        sessionToVisit.set(s.id, s.id);
-        lastVisitByKey.set(key, visit);
-      }
-    }
 
-    const pageLoadEvents = events.filter((e) => e.event_type === "page_load");
-    const pageLoadByVisit = new Map<string, Event>();
-    for (const e of [...pageLoadEvents].sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-    )) {
-      const visitId = sessionToVisit.get(e.session_id) || e.session_id;
-      if (!pageLoadByVisit.has(visitId)) pageLoadByVisit.set(visitId, e);
-    }
-    const pageLoads = Array.from(pageLoadByVisit.values());
+    const pageLoads = events.filter((e) => e.event_type === "page_load");
     // "Click" metric = lightbox_open events (menu item opens)
     const clicks = events.filter((e) => e.event_type === "lightbox_open");
 
     // Sessions that opened at least one lightbox (menu item) — never bounces.
-    const sessionsWithLightbox = new Set(
-      clicks.map((e) => sessionToVisit.get(e.session_id) || e.session_id),
-    );
+    const sessionsWithLightbox = new Set(clicks.map((e) => e.session_id));
 
     // Identify bounced sessions: under threshold AND no lightbox opened.
     // Bounced sessions are NOT counted as sessions anywhere.
@@ -294,7 +259,7 @@ function AdminPage() {
     for (const e of scrollEvents) {
       const t = e.target_id || "";
       if (scrollByThreshold[t])
-        scrollByThreshold[t].add(sessionToVisit.get(e.session_id) || e.session_id);
+        scrollByThreshold[t].add(e.session_id);
     }
     const scrollDepth = ["25", "50", "75", "100"].map((t) => ({
       threshold: t,
@@ -320,7 +285,7 @@ function AdminPage() {
     for (const e of sectionEvents) {
       const id = e.target_id || "?";
       if (!sectionByKey[id]) sectionByKey[id] = { title: e.target_text || id, sessions: new Set() };
-      sectionByKey[id].sessions.add(sessionToVisit.get(e.session_id) || e.session_id);
+      sectionByKey[id].sessions.add(e.session_id);
     }
     const sectionSeries = Object.entries(sectionByKey)
       .map(([id, v]) => ({
@@ -335,7 +300,7 @@ function AdminPage() {
     const timePerSession: Record<string, number> = {};
     for (const e of timeEvents) {
       const ms = (e.data as { ms?: number } | null)?.ms ?? 0;
-      const visitId = sessionToVisit.get(e.session_id) || e.session_id;
+      const visitId = e.session_id;
       if (!timePerSession[visitId] || ms > timePerSession[visitId]) {
         timePerSession[visitId] = ms;
       }
