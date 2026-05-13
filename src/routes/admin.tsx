@@ -202,8 +202,8 @@ function AdminPage() {
         ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
         : 0;
     const bounceRate =
-      allSess.length > 0
-        ? Math.round((bounces / allSess.length) * 1000) / 10
+      visits.length > 0
+        ? Math.round((bounces / visits.length) * 1000) / 10
         : 0;
 
     // Helper: build metrics for a bucket given its sessions + bounced count + page loads.
@@ -251,7 +251,7 @@ function AdminPage() {
       (sessByDay[d] ||= []).push(s);
     }
     const bouncedByDay: Record<string, number> = {};
-    for (const s of allSess) {
+    for (const s of visits) {
       if (!bouncedIds.has(s.id)) continue;
       const d = fmtDay(s.started_at);
       bouncedByDay[d] = (bouncedByDay[d] || 0) + 1;
@@ -277,7 +277,7 @@ function AdminPage() {
       const sessList = sessions.filter((s) =>
         b.test(gstMinutesOfDay(s.started_at))
       );
-      const bouncedCount = allSess.filter(
+      const bouncedCount = visits.filter(
         (s) => bouncedIds.has(s.id) && b.test(gstMinutesOfDay(s.started_at))
       ).length;
       return { label: b.label, ...buildBucket(loads, sessList, bouncedCount) };
