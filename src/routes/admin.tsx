@@ -123,7 +123,27 @@ function AdminPage() {
     return dayFmt.format(d);
   });
   const [customTo, setCustomTo] = useState<string>(() => todayGST());
-  const [dayFilter, setDayFilter] = useState<"all" | "weekdays" | "weekends">("all");
+  type DayFilter =
+    | "all"
+    | "weekdays"
+    | "weekends"
+    | "Mon"
+    | "Tue"
+    | "Wed"
+    | "Thu"
+    | "Fri"
+    | "Sat"
+    | "Sun";
+  const [dayFilter, setDayFilter] = useState<DayFilter>("all");
+  const WEEKDAY_LABEL: Record<Exclude<DayFilter, "all" | "weekdays" | "weekends">, string> = {
+    Mon: "Monday",
+    Tue: "Tuesday",
+    Wed: "Wednesday",
+    Thu: "Thursday",
+    Fri: "Friday",
+    Sat: "Saturday",
+    Sun: "Sunday",
+  };
 
   const presetDays: Record<Exclude<RangePreset, "custom">, number> = {
     "24h": 1,
