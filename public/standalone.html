@@ -566,8 +566,15 @@ document.addEventListener('visibilitychange', function() {
      - lightbox_open  (every menu item open, with the item name)
 */
 (function(){
-  var ALLOWED_HOST = 'aycillymenu.lovable.app';
-  if (location.hostname !== ALLOWED_HOST) return;
+  // Track on all public hosts (aycillymenu.lovable.app, GitHub Pages, custom domains).
+  // Skip only local dev and Lovable preview/sandbox so test traffic isn't logged.
+  var h = location.hostname;
+  var isLocal = h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0';
+  var isPreview = /(^|\.)lovableproject\.com$/.test(h)
+    || /(^|\.)lovable\.dev$/.test(h)
+    || /-preview--.*\.lovable\.app$/.test(h)
+    || /^id-preview--/.test(h);
+  if (isLocal || isPreview) return;
 
   var ENDPOINT = 'https://project--5e4e3e03-b49f-4efb-93bd-8198174d85d7.lovable.app/api/public/track';
   var sessionId = null;
