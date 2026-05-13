@@ -737,7 +737,7 @@ document.addEventListener('visibilitychange', function() {
     scrollTimer = setTimeout(function(){ scrollTimer = null; checkScroll(); }, 250);
   }, {passive:true});
 
-  // ---- Dwell-filtered hover on menu cards (≥500ms, once per card per session) ----
+  // ---- Dwell-filtered hover on menu cards (≥1000ms, once per card per session) ----
   var hoverHit = {};
   function bindHovers(){
     document.querySelectorAll('.card').forEach(function(card, idx){
