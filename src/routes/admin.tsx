@@ -403,7 +403,18 @@ function AdminPage() {
       sessions,
       sessionDuration,
     };
-  }, [allSessions, allEvents]);
+  }, [allSessions, allEvents, dayFilter]);
+
+  const presetLabel: Record<RangePreset, string> = {
+    "24h": "Last 24h",
+    "7d": "Last 7 days",
+    "30d": "Last 30 days",
+    "90d": "Last 90 days",
+    "365d": "Last year",
+    custom: `${customFrom} → ${customTo}`,
+  };
+  const dayFilterLabel =
+    dayFilter === "weekdays" ? " · weekdays only" : dayFilter === "weekends" ? " · weekends only" : "";
 
   return (
     <div className="min-h-screen bg-background p-6 text-foreground">
@@ -412,25 +423,64 @@ function AdminPage() {
           <div>
             <h1 className="text-2xl font-semibold">Menu Analytics</h1>
             <p className="text-sm text-muted-foreground">
-              Last {days} days · bounce = session shorter than {BOUNCE_SECONDS}s
+              {presetLabel[preset]}{dayFilterLabel} · bounce = session shorter than {BOUNCE_SECONDS}s
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <select
-              value={days}
+              value={preset}
               onChange={(e) => {
-                const d = Number(e.target.value);
-                setDays(d);
-                load(d);
+                const p = e.target.value as RangePreset;
+                setPreset(p);
+                if (p !== "custom") load({ preset: p });
               }}
               className="rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
-              <option value={1}>Last 24h</option>
-              <option value={7}>Last 7 days</option>
-              <option value={30}>Last 30 days</option>
-              <option value={90}>Last 90 days</option>
-              <option value={365}>Last year</option>
+              <option value="24h">Last 24h</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="90d">Last 90 days</option>
+              <option value="365d">Last year</option>
+              <option value="custom">Custom range…</option>
             </select>
+
+            {preset === "custom" && (
+              <>
+                <input
+                  type="date"
+                  value={customFrom}
+                  max={customTo}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="rounded-md border border-input bg-background px-2 py-2 text-sm"
+                />
+                <span className="text-muted-foreground text-sm">→</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  min={customFrom}
+                  max={todayGST()}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="rounded-md border border-input bg-background px-2 py-2 text-sm"
+                />
+                <button
+                  onClick={() => load({ preset: "custom" })}
+                  className="rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent"
+                >
+                  Apply
+                </button>
+              </>
+            )}
+
+            <select
+              value={dayFilter}
+              onChange={(e) => setDayFilter(e.target.value as typeof dayFilter)}
+              className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="all">All days</option>
+              <option value="weekdays">Weekdays (Mon–Fri)</option>
+              <option value="weekends">Weekends (Sat–Sun)</option>
+            </select>
+
             <button
               onClick={() => load()}
               className="rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-accent"
