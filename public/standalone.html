@@ -608,21 +608,132 @@ document.addEventListener('visibilitychange', function() {
     }).catch(function(){});
   }
 
+  // Generic event sender — queues until session is ready.
+  function track(payload){
+    payload.action = 'event';
+    payload.path = location.pathname + location.search;
+    if (!sessionId) { queue.push(payload); return; }
+    payload.session_id = sessionId;
+    send(payload);
+  }
+
   // Exposed for oLb() — fired only when a menu item lightbox opens.
   window.__trackLightbox = function(name, sub, idx){
-    var payload = {
-      action:'event',
-      session_id: sessionId,
+    track({
       event_type:'lightbox_open',
       target_tag:'menu-item',
       target_id: String(idx),
       target_class: sub || null,
-      target_text: name || null,
-      path: location.pathname + location.search
-    };
-    if (!sessionId) { queue.push(payload); return; }
-    send(payload);
+      target_text: name || null
+    });
   };
+  // Exposed for cLb() — dwell time inside the popup.
+  window.__trackLightboxClose = function(name, sub, idx, dwellMs){
+    track({
+      event_type:'lightbox_close',
+      target_tag:'menu-item',
+      target_id: String(idx),
+      target_class: sub || null,
+      target_text: name || null,
+      data: { dwell_ms: Math.max(0, Math.round(dwellMs||0)) }
+    });
+  };
+
+  // ---- Scroll depth: 25/50/75/100, once per session ----
+  var scrollHit = {};
+  function checkScroll(){
+    var doc = document.documentElement;
+    var scrolled = window.scrollY + window.innerHeight;
+    var total = doc.scrollHeight;
+    if (total <= window.innerHeight) return;
+    var pct = scrolled / total * 100;
+    [25,50,75,100].forEach(function(t){
+      if (!scrollHit[t] && pct >= t){
+        scrollHit[t] = true;
+        track({ event_type:'scroll_depth', target_id: String(t) });
+      }
+    });
+  }
+  var scrollTimer = null;
+  window.addEventListener('scroll', function(){
+    if (scrollTimer) return;
+    scrollTimer = setTimeout(function(){ scrollTimer = null; checkScroll(); }, 250);
+  }, {passive:true});
+
+  // ---- Dwell-filtered hover on menu cards (≥500ms, once per card per session) ----
+  var hoverHit = {};
+  function bindHovers(){
+    document.querySelectorAll('.card').forEach(function(card, idx){
+      var key = card.getAttribute('onclick') || ('card-'+idx);
+      var timer = null;
+      card.addEventListener('mouseenter', function(){
+        if (hoverHit[key]) return;
+        timer = setTimeout(function(){
+          hoverHit[key] = true;
+          var nameEl = card.querySelector('.card-name');
+          var name = nameEl ? nameEl.textContent.trim() : null;
+          var m = key.match(/oLb\((\d+)\)/);
+          track({
+            event_type:'hover',
+            target_tag:'menu-item',
+            target_id: m ? m[1] : null,
+            target_text: name
+          });
+        }, 500);
+      });
+      card.addEventListener('mouseleave', function(){
+        if (timer){ clearTimeout(timer); timer = null; }
+      });
+    });
+  }
+
+  // ---- section_view via IntersectionObserver (≥50% visible for ≥1s, once each) ----
+  var sectionHit = {};
+  function bindSections(){
+    if (!('IntersectionObserver' in window)) return;
+    var dwellTimers = {};
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        var id = en.target.id;
+        if (!id || sectionHit[id]) return;
+        if (en.isIntersecting && en.intersectionRatio >= 0.5){
+          if (dwellTimers[id]) return;
+          dwellTimers[id] = setTimeout(function(){
+            sectionHit[id] = true;
+            var titleEl = en.target.querySelector('.sub-title');
+            track({
+              event_type:'section_view',
+              target_tag:'section',
+              target_id: id,
+              target_text: titleEl ? titleEl.textContent.trim() : null
+            });
+            io.unobserve(en.target);
+          }, 1000);
+        } else if (dwellTimers[id]){
+          clearTimeout(dwellTimers[id]);
+          delete dwellTimers[id];
+        }
+      });
+    }, { threshold: [0, 0.5, 1] });
+    document.querySelectorAll('section.section').forEach(function(s){ io.observe(s); });
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    bindHovers();
+    bindSections();
+    setTimeout(checkScroll, 500);
+  });
+
+  // ---- time_on_page: accumulate visible time, send on hide / unload ----
+  var visibleSince = Date.now();
+  var totalVisibleMs = 0;
+  var timeReported = false;
+  function flushTime(){
+    if (timeReported) return;
+    if (!document.hidden) totalVisibleMs += Date.now() - visibleSince;
+    timeReported = true;
+    track({ event_type:'time_on_page', data: { ms: Math.round(totalVisibleMs) } });
+  }
 
   // Heartbeat to keep last_event_at fresh while the user is on the page
   setInterval(function(){
@@ -630,10 +741,19 @@ document.addEventListener('visibilitychange', function() {
   }, 15000);
 
   window.addEventListener('pagehide', function(){
+    flushTime();
     if (sessionId) send({action:'heartbeat', session_id: sessionId});
   });
+  window.addEventListener('beforeunload', flushTime);
   window.addEventListener('visibilitychange', function(){
-    if (document.hidden && sessionId) send({action:'heartbeat', session_id: sessionId});
+    if (document.hidden){
+      totalVisibleMs += Date.now() - visibleSince;
+      flushTime();
+      if (sessionId) send({action:'heartbeat', session_id: sessionId});
+    } else {
+      visibleSince = Date.now();
+      timeReported = false; // allow another flush if they come back and leave again
+    }
   });
 
   start();
