@@ -756,7 +756,7 @@ document.addEventListener('visibilitychange', function() {
             target_id: m ? m[1] : null,
             target_text: name
           });
-        }, 500);
+        }, 1000);
       });
       card.addEventListener('mouseleave', function(){
         if (timer){ clearTimeout(timer); timer = null; }
