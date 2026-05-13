@@ -487,6 +487,59 @@ function AdminPage() {
           </div>
         </Card>
 
+        <Card title="Top clicked items">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-muted-foreground">
+                <tr>
+                  <th className="py-2">Element</th>
+                  <th className="py-2 text-right">Clicks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.topClicks.length === 0 && (
+                  <tr>
+                    <td colSpan={2} className="py-4 text-muted-foreground">
+                      No clicks yet.
+                    </td>
+                  </tr>
+                )}
+                {stats.topClicks.map(([k, n]) => (
+                  <tr key={k} className="border-t border-border">
+                    <td className="py-2 truncate max-w-[420px]" title={k}>
+                      {k}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">{n}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <Card title="Scroll depth (sessions reaching threshold)">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-muted-foreground">
+                <tr>
+                  <th className="py-2">Threshold</th>
+                  <th className="py-2 text-right">Sessions</th>
+                  <th className="py-2 text-right">% of sessions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.scrollDepth.map((r) => (
+                  <tr key={r.threshold} className="border-t border-border">
+                    <td className="py-2">{r.threshold}%</td>
+                    <td className="py-2 text-right tabular-nums">{r.sessions}</td>
+                    <td className="py-2 text-right tabular-nums">{r.pct}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
         <Card title="Top hovered items (≥500ms dwell, deduped per session)">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -542,36 +595,6 @@ function AdminPage() {
                     </td>
                     <td className="py-2 text-right tabular-nums">{fmtMSS(r.avgSec)}</td>
                     <td className="py-2 text-right tabular-nums">{r.opens}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        <Card title="Top clicked items">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-muted-foreground">
-                <tr>
-                  <th className="py-2">Element</th>
-                  <th className="py-2 text-right">Clicks</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.topClicks.length === 0 && (
-                  <tr>
-                    <td colSpan={2} className="py-4 text-muted-foreground">
-                      No clicks yet.
-                    </td>
-                  </tr>
-                )}
-                {stats.topClicks.map(([k, n]) => (
-                  <tr key={k} className="border-t border-border">
-                    <td className="py-2 truncate max-w-[420px]" title={k}>
-                      {k}
-                    </td>
-                    <td className="py-2 text-right tabular-nums">{n}</td>
                   </tr>
                 ))}
               </tbody>
