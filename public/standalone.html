@@ -631,12 +631,12 @@ document.addEventListener('visibilitychange', function() {
   }
 
   // Generic event sender — queues until session is ready.
-  function track(payload, preferBeacon){
+  function track(payload){
     payload.action = 'event';
     payload.path = location.pathname + location.search;
     if (!sessionId) { queue.push(payload); return; }
     payload.session_id = sessionId;
-    send(payload, preferBeacon);
+    send(payload);
   }
 
   // Exposed for oLb() — fired only when a menu item lightbox opens.
