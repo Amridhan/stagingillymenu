@@ -342,15 +342,25 @@ function AdminPage() {
     const sectionEvents = events.filter((e) => e.event_type === "section_view");
     const closeEvents = events.filter((e) => e.event_type === "lightbox_close");
 
+    // Highest scroll threshold reached per session — exclusive buckets,
+    // so a session that reached 100% counts only at 100% (not 75/50/25).
+    const maxScrollBySession: Record<string, number> = {};
+    for (const e of scrollEvents) {
+      const t = Number(e.target_id || 0);
+      if (!t) continue;
+      if (!maxScrollBySession[e.session_id] || t > maxScrollBySession[e.session_id]) {
+        maxScrollBySession[e.session_id] = t;
+      }
+    }
     const scrollByThreshold: Record<string, Set<string>> = {
       "25": new Set(),
       "50": new Set(),
       "75": new Set(),
       "100": new Set(),
     };
-    for (const e of scrollEvents) {
-      const t = e.target_id || "";
-      if (scrollByThreshold[t]) scrollByThreshold[t].add(e.session_id);
+    for (const [sid, max] of Object.entries(maxScrollBySession)) {
+      const key = String(max);
+      if (scrollByThreshold[key]) scrollByThreshold[key].add(sid);
     }
     const scrollDepth = ["25", "50", "75", "100"].map((t) => ({
       threshold: t,
