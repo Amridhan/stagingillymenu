@@ -23,10 +23,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build site (copy standalone.html → index.html)
+      - name: Build site (copy standalone.html → index.html + assets)
         run: |
           mkdir -p _site
           cp public/standalone.html _site/index.html
+          cp -r public/menu-images _site/menu-images
 
       - uses: actions/configure-pages@v5
 
