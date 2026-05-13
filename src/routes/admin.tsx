@@ -123,7 +123,27 @@ function AdminPage() {
     return dayFmt.format(d);
   });
   const [customTo, setCustomTo] = useState<string>(() => todayGST());
-  const [dayFilter, setDayFilter] = useState<"all" | "weekdays" | "weekends">("all");
+  type DayFilter =
+    | "all"
+    | "weekdays"
+    | "weekends"
+    | "Mon"
+    | "Tue"
+    | "Wed"
+    | "Thu"
+    | "Fri"
+    | "Sat"
+    | "Sun";
+  const [dayFilter, setDayFilter] = useState<DayFilter>("all");
+  const WEEKDAY_LABEL: Record<Exclude<DayFilter, "all" | "weekdays" | "weekends">, string> = {
+    Mon: "Monday",
+    Tue: "Tuesday",
+    Wed: "Wednesday",
+    Thu: "Thursday",
+    Fri: "Friday",
+    Sat: "Saturday",
+    Sun: "Sunday",
+  };
 
   const presetDays: Record<Exclude<RangePreset, "custom">, number> = {
     "24h": 1,
@@ -175,8 +195,11 @@ function AdminPage() {
   const { stats, sessions, sessionDuration } = useMemo(() => {
     const matchesDayFilter = (iso: string) => {
       if (dayFilter === "all") return true;
-      const wknd = isWeekendISO(iso);
-      return dayFilter === "weekends" ? wknd : !wknd;
+      if (dayFilter === "weekdays" || dayFilter === "weekends") {
+        const wknd = isWeekendISO(iso);
+        return dayFilter === "weekends" ? wknd : !wknd;
+      }
+      return dowFmt.format(new Date(iso)) === dayFilter;
     };
     const visits = allSessions.filter(
       (s) => !EXCLUDED_SESSION_IDS.has(s.id) && matchesDayFilter(s.started_at),
@@ -414,7 +437,13 @@ function AdminPage() {
     custom: `${customFrom} → ${customTo}`,
   };
   const dayFilterLabel =
-    dayFilter === "weekdays" ? " · weekdays only" : dayFilter === "weekends" ? " · weekends only" : "";
+    dayFilter === "all"
+      ? ""
+      : dayFilter === "weekdays"
+      ? " · weekdays only"
+      : dayFilter === "weekends"
+      ? " · weekends only"
+      : ` · ${WEEKDAY_LABEL[dayFilter]}s only`;
 
   return (
     <div className="min-h-screen bg-background p-6 text-foreground">
@@ -479,6 +508,15 @@ function AdminPage() {
               <option value="all">All days</option>
               <option value="weekdays">Weekdays (Mon–Fri)</option>
               <option value="weekends">Weekends (Sat–Sun)</option>
+              <optgroup label="Single weekday">
+                <option value="Mon">Mondays</option>
+                <option value="Tue">Tuesdays</option>
+                <option value="Wed">Wednesdays</option>
+                <option value="Thu">Thursdays</option>
+                <option value="Fri">Fridays</option>
+                <option value="Sat">Saturdays</option>
+                <option value="Sun">Sundays</option>
+              </optgroup>
             </select>
 
             <button
