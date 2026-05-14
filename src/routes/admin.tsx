@@ -811,19 +811,18 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 }
 
 function DevicesCard({ devices: allDevices, onRefresh }: { devices: Device[]; onRefresh: () => void }) {
-  const [edits, setEdits] = useState<Record<string, { label: string; serial: string; location: string }>>({});
+  const [edits, setEdits] = useState<Record<string, { label: string; location: string }>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
-  // Only show devices that haven't been configured yet (no serial saved)
-  const devices = allDevices.filter((d) => !d.serial || d.serial.trim() === "");
+  // Only show devices that haven't been configured yet (no label saved)
+  const devices = allDevices.filter((d) => !d.label || d.label.trim() === "");
 
   const getRow = (d: Device) =>
     edits[d.device_id] ?? {
       label: d.label ?? "",
-      serial: d.serial ?? "",
       location: d.location ?? "",
     };
 
-  const setField = (id: string, field: "label" | "serial" | "location", value: string) => {
+  const setField = (id: string, field: "label" | "location", value: string) => {
     setEdits((prev) => ({ ...prev, [id]: { ...getRow({ device_id: id, label: null, serial: null, location: null, first_seen_at: "", last_seen_at: "" }), ...prev[id], [field]: value } }));
   };
 
@@ -854,7 +853,7 @@ function DevicesCard({ devices: allDevices, onRefresh }: { devices: Device[]; on
     <Card title={`Devices (${devices.length})`}>
       <p className="mb-3 text-xs text-muted-foreground">
         Each tablet generates a persistent device ID on first visit. Label them once (e.g. "Store 1 — Counter")
-        and add the Hexnode serial. Sessions will then show the friendly name.
+        and add a location. Sessions will then show the friendly name.
       </p>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -862,7 +861,6 @@ function DevicesCard({ devices: allDevices, onRefresh }: { devices: Device[]; on
             <tr>
               <th className="py-2">Device ID</th>
               <th className="py-2">Label</th>
-              <th className="py-2">Serial</th>
               <th className="py-2">Location</th>
               <th className="py-2">Last seen</th>
               <th className="py-2"></th>
@@ -871,7 +869,7 @@ function DevicesCard({ devices: allDevices, onRefresh }: { devices: Device[]; on
           <tbody>
             {devices.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-4 text-muted-foreground">
+                <td colSpan={5} className="py-4 text-muted-foreground">
                   No devices recorded yet.
                 </td>
               </tr>
@@ -889,14 +887,6 @@ function DevicesCard({ devices: allDevices, onRefresh }: { devices: Device[]; on
                       value={row.label}
                       onChange={(e) => setField(d.device_id, "label", e.target.value)}
                       placeholder="e.g. Store 1 — Counter"
-                      className="w-full rounded border border-input bg-background px-2 py-1 text-sm"
-                    />
-                  </td>
-                  <td className="py-2">
-                    <input
-                      value={row.serial}
-                      onChange={(e) => setField(d.device_id, "serial", e.target.value)}
-                      placeholder="Hexnode serial"
                       className="w-full rounded border border-input bg-background px-2 py-1 text-sm"
                     />
                   </td>
@@ -929,3 +919,4 @@ function DevicesCard({ devices: allDevices, onRefresh }: { devices: Device[]; on
     </Card>
   );
 }
+
