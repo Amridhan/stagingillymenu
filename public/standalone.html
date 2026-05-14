@@ -613,7 +613,6 @@ document.addEventListener('visibilitychange', function() {
   if (isLocal || isPreview) return;
 
   var ENDPOINT = 'https://project--5e4e3e03-b49f-4efb-93bd-8198174d85d7.lovable.app/api/public/track';
-  var SESSION_KEY = 'aycilly.analytics.session.v1';
   var DEVICE_KEY = 'aycilly.analytics.device.v1';
   var sessionId = null;
   var deviceId = null;
@@ -648,16 +647,6 @@ document.addEventListener('visibilitychange', function() {
     }
   }
 
-  try {
-    var stored = sessionStorage.getItem(SESSION_KEY);
-    if (stored) {
-      var parsed = JSON.parse(stored);
-      if (parsed && parsed.id && Date.now() - parsed.startedAt < 30 * 60 * 1000) {
-        sessionId = parsed.id;
-      }
-    }
-  } catch(e) {}
-
   function flushQueue(){
     queue.forEach(function(p){ p.session_id = sessionId; send(p); });
     queue = [];
@@ -683,10 +672,6 @@ document.addEventListener('visibilitychange', function() {
   }
 
   function start(){
-    if (sessionId) {
-      send({action:'heartbeat', session_id: sessionId});
-      return;
-    }
     fetch(ENDPOINT, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -701,9 +686,6 @@ document.addEventListener('visibilitychange', function() {
       })
     }).then(function(r){return r.json();}).then(function(j){
       sessionId = j.session_id;
-      try {
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify({id: sessionId, startedAt: Date.now()}));
-      } catch(e) {}
       flushQueue();
     }).catch(function(){});
   }
