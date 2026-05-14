@@ -744,6 +744,8 @@ function AdminPage() {
           </div>
         </Card>
 
+        <DevicesCard devices={devices} onRefresh={() => load()} />
+
         <Card title="Recent sessions">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -751,24 +753,28 @@ function AdminPage() {
                 <tr>
                   <th className="py-2">Started</th>
                   <th className="py-2">Duration</th>
+                  <th className="py-2">Device</th>
                   <th className="py-2">Referrer</th>
                   <th className="py-2">Screen</th>
-
                   <th className="py-2">User agent</th>
                 </tr>
               </thead>
               <tbody>
                 {sessions.slice(0, 100).map((s) => {
                   const sec = sessionDuration[s.id] ?? 0;
+                  const dev = s.device_id ? devices.find((d) => d.device_id === s.device_id) : null;
+                  const devLabel = dev?.label || (s.device_id ? s.device_id.slice(0, 8) : "—");
                   return (
                     <tr key={s.id} className="border-t border-border">
                       <td className="py-2 whitespace-nowrap">{fmtDateTime(s.started_at)}</td>
                       <td className="py-2 tabular-nums">{sec}s</td>
+                      <td className="py-2 truncate max-w-[160px]" title={s.device_id || ""}>
+                        {devLabel}
+                      </td>
                       <td className="py-2 truncate max-w-[200px]" title={s.referrer || ""}>
                         {s.referrer || "—"}
                       </td>
                       <td className="py-2">{s.screen || "—"}</td>
-
                       <td className="py-2 truncate max-w-[300px]" title={s.user_agent || ""}>
                         {s.user_agent || "—"}
                       </td>
