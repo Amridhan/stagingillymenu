@@ -233,20 +233,22 @@ function AdminPage() {
       }
     }
 
-    // Effective duration per session (sec). Prefers time_on_page; falls back
-    // to last_event_at − started_at when no time event was recorded.
+    // Effective duration per session (sec). Prefers time_on_page (active
+    // engagement only). Falls back to last_event_at − started_at when no
+    // time event was recorded, but capped at MAX_FALLBACK_SEC because kiosk
+    // tablets keep sessions alive via heartbeats for hours without any real
+    // user engagement, which inflates the metric.
+    const MAX_FALLBACK_SEC = 30 * 60; // 30 minutes
     const sessionDuration: Record<string, number> = {};
     for (const s of visits) {
       const fromTime = timePerSession[s.id];
       if (fromTime != null) {
         sessionDuration[s.id] = Math.max(0, Math.round(fromTime / 1000));
       } else {
-        sessionDuration[s.id] = Math.max(
-          0,
-          Math.round(
-            (new Date(s.last_event_at).getTime() - new Date(s.started_at).getTime()) / 1000,
-          ),
+        const raw = Math.round(
+          (new Date(s.last_event_at).getTime() - new Date(s.started_at).getTime()) / 1000,
         );
+        sessionDuration[s.id] = Math.max(0, Math.min(raw, MAX_FALLBACK_SEC));
       }
     }
 
