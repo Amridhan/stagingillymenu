@@ -126,6 +126,7 @@ export const Route = createFileRoute("/api/admin/stats")({
               (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime(),
             ),
             events,
+            devices: devicesRes.data ?? [],
           });
         } catch (e) {
           return json({ error: (e as Error).message }, 500);
