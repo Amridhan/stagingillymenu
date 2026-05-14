@@ -13,6 +13,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiPublicTrackRouteImport } from './routes/api/public/track'
 import { Route as ApiAdminStatsRouteImport } from './routes/api/admin/stats'
+import { Route as ApiAdminDeviceRouteImport } from './routes/api/admin/device'
 
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
@@ -34,16 +35,23 @@ const ApiAdminStatsRoute = ApiAdminStatsRouteImport.update({
   path: '/api/admin/stats',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminDeviceRoute = ApiAdminDeviceRouteImport.update({
+  id: '/api/admin/device',
+  path: '/api/admin/device',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/api/admin/device': typeof ApiAdminDeviceRoute
   '/api/admin/stats': typeof ApiAdminStatsRoute
   '/api/public/track': typeof ApiPublicTrackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/api/admin/device': typeof ApiAdminDeviceRoute
   '/api/admin/stats': typeof ApiAdminStatsRoute
   '/api/public/track': typeof ApiPublicTrackRoute
 }
@@ -51,20 +59,38 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/api/admin/device': typeof ApiAdminDeviceRoute
   '/api/admin/stats': typeof ApiAdminStatsRoute
   '/api/public/track': typeof ApiPublicTrackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/api/admin/stats' | '/api/public/track'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/api/admin/device'
+    | '/api/admin/stats'
+    | '/api/public/track'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/api/admin/stats' | '/api/public/track'
-  id: '__root__' | '/' | '/admin' | '/api/admin/stats' | '/api/public/track'
+  to:
+    | '/'
+    | '/admin'
+    | '/api/admin/device'
+    | '/api/admin/stats'
+    | '/api/public/track'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/api/admin/device'
+    | '/api/admin/stats'
+    | '/api/public/track'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  ApiAdminDeviceRoute: typeof ApiAdminDeviceRoute
   ApiAdminStatsRoute: typeof ApiAdminStatsRoute
   ApiPublicTrackRoute: typeof ApiPublicTrackRoute
 }
@@ -99,15 +125,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminStatsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/device': {
+      id: '/api/admin/device'
+      path: '/api/admin/device'
+      fullPath: '/api/admin/device'
+      preLoaderRoute: typeof ApiAdminDeviceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  ApiAdminDeviceRoute: ApiAdminDeviceRoute,
   ApiAdminStatsRoute: ApiAdminStatsRoute,
   ApiPublicTrackRoute: ApiPublicTrackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
