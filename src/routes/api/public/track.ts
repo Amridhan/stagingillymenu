@@ -31,6 +31,7 @@ export const Route = createFileRoute("/api/public/track")({
           const body = JSON.parse(raw || "{}") as {
             action: "start" | "event" | "heartbeat";
             session_id?: string;
+            device_id?: string;
             user_agent?: string;
             referrer?: string;
             screen?: string;
@@ -52,19 +53,34 @@ export const Route = createFileRoute("/api/public/track")({
             const screen = body.screen?.slice(0, 50) ?? null;
             const language = body.language?.slice(0, 20) ?? null;
             const path = body.path?.slice(0, 500) ?? null;
+            const device_id = body.device_id?.slice(0, 100) ?? null;
             const recentSince = new Date(Date.now() - 30_000).toISOString();
 
+            // Upsert device row (track first/last seen).
+            if (device_id) {
+              await sb.from("devices").upsert(
+                { device_id, last_seen_at: new Date().toISOString() },
+                { onConflict: "device_id" },
+              );
+            }
+
+            // Dedup: prefer device_id when present (more reliable than UA fingerprint).
             let existingQuery = sb
               .from("analytics_sessions")
               .select("id")
               .gte("started_at", recentSince)
-              .eq("user_agent", user_agent)
-              .eq("screen", screen)
-              .eq("language", language)
               .order("started_at", { ascending: false })
               .limit(1);
 
-            existingQuery = referrer === null ? existingQuery.is("referrer", null) : existingQuery.eq("referrer", referrer);
+            if (device_id) {
+              existingQuery = existingQuery.eq("device_id", device_id);
+            } else {
+              existingQuery = existingQuery
+                .eq("user_agent", user_agent)
+                .eq("screen", screen)
+                .eq("language", language);
+              existingQuery = referrer === null ? existingQuery.is("referrer", null) : existingQuery.eq("referrer", referrer);
+            }
 
             const { data: existing, error: existingError } = await existingQuery.maybeSingle();
             if (existingError) return json({ error: existingError.message }, 500);
@@ -78,7 +94,7 @@ export const Route = createFileRoute("/api/public/track")({
 
             const { data, error } = await sb
               .from("analytics_sessions")
-              .insert({ user_agent, referrer, screen, language })
+              .insert({ user_agent, referrer, screen, language, device_id })
               .select("id")
               .single();
             if (error) return json({ error: error.message }, 500);
