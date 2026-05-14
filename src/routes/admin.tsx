@@ -810,9 +810,11 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-function DevicesCard({ devices, onRefresh }: { devices: Device[]; onRefresh: () => void }) {
+function DevicesCard({ devices: allDevices, onRefresh }: { devices: Device[]; onRefresh: () => void }) {
   const [edits, setEdits] = useState<Record<string, { label: string; serial: string; location: string }>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
+  // Only show devices that haven't been configured yet (no serial saved)
+  const devices = allDevices.filter((d) => !d.serial || d.serial.trim() === "");
 
   const getRow = (d: Device) =>
     edits[d.device_id] ?? {
