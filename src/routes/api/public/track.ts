@@ -54,7 +54,6 @@ export const Route = createFileRoute("/api/public/track")({
             const language = body.language?.slice(0, 20) ?? null;
             const path = body.path?.slice(0, 500) ?? null;
             const device_id = body.device_id?.slice(0, 100) ?? null;
-            const recentSince = new Date(Date.now() - 30_000).toISOString();
 
             // Upsert device row (track first/last seen).
             if (device_id) {
@@ -62,34 +61,6 @@ export const Route = createFileRoute("/api/public/track")({
                 { device_id, last_seen_at: new Date().toISOString() },
                 { onConflict: "device_id" },
               );
-            }
-
-            // Dedup: prefer device_id when present (more reliable than UA fingerprint).
-            let existingQuery = sb
-              .from("analytics_sessions")
-              .select("id")
-              .gte("started_at", recentSince)
-              .order("started_at", { ascending: false })
-              .limit(1);
-
-            if (device_id) {
-              existingQuery = existingQuery.eq("device_id", device_id);
-            } else {
-              existingQuery = existingQuery
-                .eq("user_agent", user_agent)
-                .eq("screen", screen)
-                .eq("language", language);
-              existingQuery = referrer === null ? existingQuery.is("referrer", null) : existingQuery.eq("referrer", referrer);
-            }
-
-            const { data: existing, error: existingError } = await existingQuery.maybeSingle();
-            if (existingError) return json({ error: existingError.message }, 500);
-            if (existing?.id) {
-              await sb
-                .from("analytics_sessions")
-                .update({ last_event_at: new Date().toISOString() })
-                .eq("id", existing.id);
-              return json({ session_id: existing.id, deduped: true });
             }
 
             const { data, error } = await sb

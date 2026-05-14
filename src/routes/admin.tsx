@@ -203,7 +203,7 @@ function AdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { stats, sessions, sessionDuration } = useMemo(() => {
+  const { stats, sessions, recentSessions, sessionDuration } = useMemo(() => {
     const matchesDayFilter = (iso: string) => {
       if (dayFilter === "all") return true;
       if (dayFilter === "weekdays" || dayFilter === "weekends") {
@@ -447,6 +447,7 @@ function AdminPage() {
         sectionSeries,
       },
       sessions,
+      recentSessions: visits,
       sessionDuration,
     };
   }, [allSessions, allEvents, dayFilter]);
@@ -760,7 +761,7 @@ function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {sessions.slice(0, 100).map((s) => {
+                {recentSessions.slice(0, 100).map((s) => {
                   const sec = sessionDuration[s.id] ?? 0;
                   const dev = s.device_id ? devices.find((d) => d.device_id === s.device_id) : null;
                   const devLabel = dev?.label || (s.device_id ? s.device_id.slice(0, 8) : "—");
