@@ -9,6 +9,15 @@ type Session = {
   referrer: string | null;
   screen: string | null;
   language: string | null;
+  device_id: string | null;
+};
+type Device = {
+  device_id: string;
+  label: string | null;
+  serial: string | null;
+  location: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
 };
 type Event = {
   id: number;
@@ -115,6 +124,7 @@ function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [allSessions, setSessions] = useState<Session[]>([]);
   const [allEvents, setEvents] = useState<Event[]>([]);
+  const [devices, setDevices] = useState<Device[]>([]);
 
   type RangePreset = "24h" | "7d" | "30d" | "90d" | "365d" | "custom";
   const [preset, setPreset] = useState<RangePreset>("30d");
