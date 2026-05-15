@@ -98,10 +98,10 @@ function OpenMenu() {
         aria-hidden="true"
         style={{
           position: "fixed",
-          top: 72,
+          top: 0,
           right: 0,
-          width: 48,
-          height: 56,
+          width: 80,
+          height: 64,
           background: "transparent",
           zIndex: 2147483646,
         }}
