@@ -109,6 +109,16 @@ const fmtMSS = (sec: number) => {
   return `${m}:${s.toString().padStart(2, "0")}`;
 };
 
+const sessionFingerprint = (s: Pick<Session, "user_agent" | "screen">) => {
+  const ua = (s.user_agent || "")
+    .toLowerCase()
+    .replace(/(chrome|version|safari|applewebkit)\/[\d.]+/g, "$1")
+    .replace(/build\/[\w.]+/g, "build")
+    .replace(/\s+/g, " ")
+    .trim();
+  return `${s.screen || ""}|${ua}`;
+};
+
 type Band = { label: string; test: (min: number) => boolean };
 
 const TIME_BANDS: Band[] = [
