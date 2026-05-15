@@ -10115,9 +10115,12 @@
           }
         }, 15000);
 
+        // Unload heartbeats are only sent when the user actually interacted.
+        // Otherwise an unattended kiosk page load that closes after 1–2s would
+        // emit a final heartbeat and look like a real visit.
         window.addEventListener("pagehide", function () {
           flushTime();
-          if (sessionId) {
+          if (sessionId && lastActivity) {
             send({ action: "heartbeat", session_id: sessionId });
           }
         });
@@ -10125,7 +10128,7 @@
         window.addEventListener("visibilitychange", function () {
           if (document.hidden) {
             flushTime();
-            if (sessionId) {
+            if (sessionId && lastActivity) {
               send({ action: "heartbeat", session_id: sessionId });
             }
           } else {
