@@ -10104,7 +10104,7 @@
             // Discard the passive session row (and its events) server-side so
             // the analytics table only contains sessions with real engagement.
             if (sessionId) {
-              send({ action: "discard", session_id: sessionId });
+              pendingDiscardSessionId = sessionId;
             }
             closeCurrentSession();
             realActivitySeen = true;
