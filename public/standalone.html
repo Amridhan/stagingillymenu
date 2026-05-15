@@ -9864,6 +9864,12 @@
           }
         }
 
+        function makeId(prefix) {
+          return crypto && crypto.randomUUID
+            ? crypto.randomUUID()
+            : prefix + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+        }
+
         function flushQueue() {
           queue.forEach(function (p) {
             p.session_id = sessionId;
@@ -9902,41 +9908,20 @@
           if (sessionId || startRequested || document.hidden) return;
           startRequested = true;
           var seq = ++sessionSeq;
+          sessionId = makeId("s-");
           sessionStartedAt = Date.now();
-          fetch(ENDPOINT, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "start",
-              device_id: deviceId,
-              user_agent: navigator.userAgent,
-              referrer: document.referrer || null,
-              screen: window.screen.width + "x" + window.screen.height,
-              language: navigator.language,
-              path: location.pathname + location.search,
-            }),
-          })
-            .then(function (r) {
-              return r.json();
-            })
-            .then(function (j) {
-              if (seq !== sessionSeq) return;
-              if (document.hidden) {
-                sessionId = j.session_id;
-                reportSessionEnd();
-                closeCurrentSession();
-                startRequested = false;
-                sessionStartedAt = 0;
-                return;
-              }
-              sessionId = j.session_id;
-              flushQueue();
-            })
-            .catch(function () {
-              if (seq !== sessionSeq) return;
-              startRequested = false;
-              sessionStartedAt = 0;
-            });
+          send({
+            action: "start",
+            session_id: sessionId,
+            device_id: deviceId,
+            user_agent: navigator.userAgent,
+            referrer: document.referrer || null,
+            screen: window.screen.width + "x" + window.screen.height,
+            language: navigator.language,
+            path: location.pathname + location.search,
+          });
+          startRequested = false;
+          if (seq === sessionSeq) flushQueue();
         }
 
         function closeCurrentSession() {
