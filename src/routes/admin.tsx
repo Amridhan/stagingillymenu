@@ -222,11 +222,22 @@ function AdminPage() {
       }
       return dowFmt.format(new Date(iso)) === dayFilter;
     };
-    const visits = allSessions.filter(
+    const rawVisits = allSessions.filter(
       (s) => !EXCLUDED_SESSION_IDS.has(s.id) && matchesDayFilter(s.started_at),
     );
+    const dedupedVisits = new Map<string, Session>();
+    for (const s of rawVisits) {
+      const minuteBucket = Math.floor(new Date(s.started_at).getTime() / 60_000);
+      const key = `${minuteBucket}|${sessionFingerprint(s)}`;
+      const existing = dedupedVisits.get(key);
+      if (!existing || new Date(s.started_at).getTime() < new Date(existing.started_at).getTime()) {
+        dedupedVisits.set(key, s);
+      }
+    }
+    const visibleSessionIds = new Set(Array.from(dedupedVisits.values()).map((s) => s.id));
+    const visits = Array.from(dedupedVisits.values());
     const events = allEvents.filter(
-      (e) => !EXCLUDED_SESSION_IDS.has(e.session_id) && matchesDayFilter(e.created_at),
+      (e) => visibleSessionIds.has(e.session_id) && matchesDayFilter(e.created_at),
     );
 
     const pageLoads = events.filter((e) => e.event_type === "page_load");
