@@ -9829,6 +9829,7 @@
         var sessionEndReported = false;
         var sessionSeq = 0;
         var realActivitySeen = false;
+        var pendingDiscardSessionId = null;
 
         // Persistent per-tablet ID. Stored in localStorage so it survives reloads,
         // session timeouts, and kiosk auto-restarts. Only cleared by a full
@@ -9862,6 +9863,13 @@
                 : "d-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
             setCookieDeviceId(deviceId);
           }
+        }
+
+        function makeId() {
+          if (crypto && crypto.randomUUID) return crypto.randomUUID();
+          return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, function (c) {
+            return (Number(c) ^ (Math.random() * 16 >> (Number(c) / 4))).toString(16);
+          });
         }
 
         function flushQueue() {
@@ -9899,44 +9907,25 @@
         }
 
         function start() {
-          if (sessionId || startRequested || document.hidden) return;
+          if (!realActivitySeen || sessionId || startRequested || document.hidden) return;
           startRequested = true;
           var seq = ++sessionSeq;
+          sessionId = makeId();
           sessionStartedAt = Date.now();
-          fetch(ENDPOINT, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "start",
-              device_id: deviceId,
-              user_agent: navigator.userAgent,
-              referrer: document.referrer || null,
-              screen: window.screen.width + "x" + window.screen.height,
-              language: navigator.language,
-              path: location.pathname + location.search,
-            }),
-          })
-            .then(function (r) {
-              return r.json();
-            })
-            .then(function (j) {
-              if (seq !== sessionSeq) return;
-              if (document.hidden) {
-                sessionId = j.session_id;
-                reportSessionEnd();
-                closeCurrentSession();
-                startRequested = false;
-                sessionStartedAt = 0;
-                return;
-              }
-              sessionId = j.session_id;
-              flushQueue();
-            })
-            .catch(function () {
-              if (seq !== sessionSeq) return;
-              startRequested = false;
-              sessionStartedAt = 0;
-            });
+          send({
+            action: "start",
+            session_id: sessionId,
+            discard_session_id: pendingDiscardSessionId,
+            device_id: deviceId,
+            user_agent: navigator.userAgent,
+            referrer: document.referrer || null,
+            screen: window.screen.width + "x" + window.screen.height,
+            language: navigator.language,
+            path: location.pathname + location.search,
+          });
+          pendingDiscardSessionId = null;
+          startRequested = false;
+          if (seq === sessionSeq) flushQueue();
         }
 
         function closeCurrentSession() {
@@ -9970,6 +9959,7 @@
             queue.push(payload);
             return;
           }
+          if (payload.event_type === "section_view" && !realActivitySeen) return;
           payload.session_id = sessionId;
           send(payload);
         }
@@ -10114,7 +10104,7 @@
             // Discard the passive session row (and its events) server-side so
             // the analytics table only contains sessions with real engagement.
             if (sessionId) {
-              send({ action: "discard", session_id: sessionId });
+              pendingDiscardSessionId = sessionId;
             }
             closeCurrentSession();
             realActivitySeen = true;
@@ -10192,11 +10182,12 @@
           } else {
             timeReported = false; // allow another flush if they leave again
             sessionEndReported = false;
-            start();
           }
         });
 
-        start();
+        // Sessions start only after trusted human input. Passive page loads,
+        // automatic section views, and WebView preload/restore events do not
+        // create analytics sessions.
       })();
     </script>
   </body>

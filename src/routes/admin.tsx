@@ -38,7 +38,13 @@ export const Route = createFileRoute("/admin")({
 });
 
 const BOUNCE_SECONDS = 10;
-const REAL_ENGAGEMENT_EVENTS = new Set(["lightbox_open", "lightbox_close", "hover"]);
+const REAL_ENGAGEMENT_EVENTS = new Set([
+  "lightbox_open",
+  "lightbox_close",
+  "hover",
+  "time_on_page",
+  "session_end",
+]);
 
 const TZ = "Asia/Dubai"; // Gulf Standard Time (UTC+4)
 const EXCLUDED_SESSION_IDS = new Set<string>([
@@ -274,11 +280,14 @@ function AdminPage() {
       }
       if (fromEnd != null) {
         const endAt = endedAtPerSession[s.id];
+        const serverWallMs = endAt ? Math.max(0, endAt - startedAt) : null;
         const adjustedMs =
           engagedAt && endAt && idleBeforeEngagement > BOUNCE_SECONDS * 1000
             ? Math.max(0, endAt - engagedAt)
             : fromEnd;
-        sessionDuration[s.id] = Math.max(0, Math.round(adjustedMs / 1000));
+        const trustedMs =
+          serverWallMs != null && adjustedMs - serverWallMs > 3000 ? serverWallMs : adjustedMs;
+        sessionDuration[s.id] = Math.max(0, Math.round(trustedMs / 1000));
       } else if (fromTime != null) {
         sessionDuration[s.id] = Math.max(0, Math.round(fromTime / 1000));
       } else {
@@ -289,14 +298,14 @@ function AdminPage() {
       }
     }
 
-    // Sessions that opened at least one lightbox — never bounces.
-    const sessionsWithLightbox = new Set(clicks.map((e) => e.session_id));
+    // Sessions that contain explicit engagement/end timing — never bounces.
+    const engagedSessionIds = new Set(events.filter((e) => REAL_ENGAGEMENT_EVENTS.has(e.event_type)).map((e) => e.session_id));
 
-    // Bounce: shorter than threshold AND no lightbox opened.
+    // Bounce: shorter than threshold AND no real engagement recorded.
     const bouncedIds = new Set<string>();
     for (const s of visits) {
       const sec = sessionDuration[s.id] ?? 0;
-      if (sec < BOUNCE_SECONDS && !sessionsWithLightbox.has(s.id)) {
+      if (sec < BOUNCE_SECONDS && !engagedSessionIds.has(s.id)) {
         bouncedIds.add(s.id);
       }
     }
