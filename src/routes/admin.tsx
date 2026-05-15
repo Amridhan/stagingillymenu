@@ -255,11 +255,9 @@ function AdminPage() {
     }
 
     // Effective duration per session (sec). Prefers time_on_page (active
-    // engagement only). Falls back to last_event_at − started_at when no
-    // time event was recorded, but capped at MAX_FALLBACK_SEC because kiosk
-    // tablets keep sessions alive via heartbeats for hours without any real
-    // user engagement, which inflates the metric.
-    const MAX_FALLBACK_SEC = 30 * 60; // 30 minutes
+    // engagement only). Without active-time data, only show a tiny capped
+    // fallback so background kiosk heartbeats do not look like long visits.
+    const MAX_FALLBACK_SEC = 60;
     const sessionDuration: Record<string, number> = {};
     for (const s of visits) {
       const fromTime = timePerSession[s.id];
