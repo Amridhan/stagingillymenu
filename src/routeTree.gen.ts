@@ -14,6 +14,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiPublicTrackRouteImport } from './routes/api/public/track'
 import { Route as ApiAdminStatsRouteImport } from './routes/api/admin/stats'
+import { Route as ApiAdminLogoutRouteImport } from './routes/api/admin/logout'
 import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
 import { Route as ApiAdminDeviceRouteImport } from './routes/api/admin/device'
 
@@ -42,6 +43,11 @@ const ApiAdminStatsRoute = ApiAdminStatsRouteImport.update({
   path: '/api/admin/stats',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminLogoutRoute = ApiAdminLogoutRouteImport.update({
+  id: '/api/admin/logout',
+  path: '/api/admin/logout',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAdminLoginRoute = ApiAdminLoginRouteImport.update({
   id: '/api/admin/login',
   path: '/api/admin/login',
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/open-menu': typeof OpenMenuRoute
   '/api/admin/device': typeof ApiAdminDeviceRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
+  '/api/admin/logout': typeof ApiAdminLogoutRoute
   '/api/admin/stats': typeof ApiAdminStatsRoute
   '/api/public/track': typeof ApiPublicTrackRoute
 }
@@ -68,6 +75,7 @@ export interface FileRoutesByTo {
   '/open-menu': typeof OpenMenuRoute
   '/api/admin/device': typeof ApiAdminDeviceRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
+  '/api/admin/logout': typeof ApiAdminLogoutRoute
   '/api/admin/stats': typeof ApiAdminStatsRoute
   '/api/public/track': typeof ApiPublicTrackRoute
 }
@@ -78,6 +86,7 @@ export interface FileRoutesById {
   '/open-menu': typeof OpenMenuRoute
   '/api/admin/device': typeof ApiAdminDeviceRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
+  '/api/admin/logout': typeof ApiAdminLogoutRoute
   '/api/admin/stats': typeof ApiAdminStatsRoute
   '/api/public/track': typeof ApiPublicTrackRoute
 }
@@ -89,6 +98,7 @@ export interface FileRouteTypes {
     | '/open-menu'
     | '/api/admin/device'
     | '/api/admin/login'
+    | '/api/admin/logout'
     | '/api/admin/stats'
     | '/api/public/track'
   fileRoutesByTo: FileRoutesByTo
@@ -98,6 +108,7 @@ export interface FileRouteTypes {
     | '/open-menu'
     | '/api/admin/device'
     | '/api/admin/login'
+    | '/api/admin/logout'
     | '/api/admin/stats'
     | '/api/public/track'
   id:
@@ -107,6 +118,7 @@ export interface FileRouteTypes {
     | '/open-menu'
     | '/api/admin/device'
     | '/api/admin/login'
+    | '/api/admin/logout'
     | '/api/admin/stats'
     | '/api/public/track'
   fileRoutesById: FileRoutesById
@@ -117,6 +129,7 @@ export interface RootRouteChildren {
   OpenMenuRoute: typeof OpenMenuRoute
   ApiAdminDeviceRoute: typeof ApiAdminDeviceRoute
   ApiAdminLoginRoute: typeof ApiAdminLoginRoute
+  ApiAdminLogoutRoute: typeof ApiAdminLogoutRoute
   ApiAdminStatsRoute: typeof ApiAdminStatsRoute
   ApiPublicTrackRoute: typeof ApiPublicTrackRoute
 }
@@ -158,6 +171,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminStatsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/logout': {
+      id: '/api/admin/logout'
+      path: '/api/admin/logout'
+      fullPath: '/api/admin/logout'
+      preLoaderRoute: typeof ApiAdminLogoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/login': {
       id: '/api/admin/login'
       path: '/api/admin/login'
@@ -181,6 +201,7 @@ const rootRouteChildren: RootRouteChildren = {
   OpenMenuRoute: OpenMenuRoute,
   ApiAdminDeviceRoute: ApiAdminDeviceRoute,
   ApiAdminLoginRoute: ApiAdminLoginRoute,
+  ApiAdminLogoutRoute: ApiAdminLogoutRoute,
   ApiAdminStatsRoute: ApiAdminStatsRoute,
   ApiPublicTrackRoute: ApiPublicTrackRoute,
 }
