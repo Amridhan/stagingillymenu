@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export const Route = createFileRoute("/open-menu")({
   head: () => ({
@@ -52,14 +52,32 @@ function readOrCreateDeviceId(): string {
 
 function OpenMenu() {
   const [pairCode, setPairCode] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState(false);
+  const tapsRef = useRef<number[]>([]);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const id = readOrCreateDeviceId();
+    setPairCode(id.replace(/-/g, "").slice(0, 8).toUpperCase());
     const isPair = new URLSearchParams(window.location.search).get("pair") === "1";
-    if (isPair) {
-      setPairCode(id.replace(/-/g, "").slice(0, 8).toUpperCase());
-    }
+    if (isPair) setRevealed(true);
+    return () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
   }, []);
+
+  const handleHiddenTap = () => {
+    const now = Date.now();
+    const recent = tapsRef.current.filter((t) => now - t < 5000);
+    recent.push(now);
+    tapsRef.current = recent;
+    if (recent.length >= 5) {
+      tapsRef.current = [];
+      setRevealed(true);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = setTimeout(() => setRevealed(false), 120000);
+    }
+  };
 
   return (
     <>
@@ -74,7 +92,21 @@ function OpenMenu() {
           border: 0,
         }}
       />
-      {pairCode && (
+      <div
+        onClick={handleHiddenTap}
+        onTouchStart={handleHiddenTap}
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          top: 0,
+          right: 0,
+          width: 48,
+          height: 48,
+          background: "transparent",
+          zIndex: 2147483646,
+        }}
+      />
+      {pairCode && revealed && (
         <div
           style={{
             position: "fixed",
