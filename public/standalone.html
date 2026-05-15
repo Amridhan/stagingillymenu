@@ -9829,6 +9829,7 @@
         var sessionEndReported = false;
         var sessionSeq = 0;
         var realActivitySeen = false;
+        var activeStartedAt = 0;
 
         // Persistent per-tablet ID. Stored in localStorage so it survives reloads,
         // session timeouts, and kiosk auto-restarts. Only cleared by a full
@@ -9929,16 +9930,6 @@
               startRequested = false;
               sessionStartedAt = 0;
             });
-        }
-
-        function restartSessionForInteraction() {
-          sessionSeq++;
-          sessionId = null;
-          startRequested = false;
-          sessionStartedAt = 0;
-          sessionEndReported = false;
-          queue = [];
-          start();
         }
 
         // Generic event sender — queues until session is ready.
