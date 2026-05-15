@@ -31,6 +31,8 @@ function trackingFingerprint(userAgent: string | null, screen: string | null) {
   return `${screen || ""}|${normalizedUa}`;
 }
 
+const LAST_EVENT_TYPES = new Set(["time_on_page", "session_end", "lightbox_open", "lightbox_close", "hover"]);
+
 export const Route = createFileRoute("/api/public/track")({
   server: {
     handlers: {
@@ -104,23 +106,29 @@ export const Route = createFileRoute("/api/public/track")({
           }
 
           if (body.action === "event") {
-            const [{ error: e1 }] = await Promise.all([
-              sb.from("analytics_events").insert({
-                session_id: body.session_id,
-                event_type: (body.event_type || "click").slice(0, 50),
-                target_tag: body.target_tag?.slice(0, 50),
-                target_id: body.target_id?.slice(0, 200),
-                target_class: body.target_class?.slice(0, 300),
-                target_text: body.target_text?.slice(0, 300),
-                path: body.path?.slice(0, 500),
-                data: body.data ?? null,
-              }),
-              sb
-                .from("analytics_sessions")
-                .update({ last_event_at: new Date().toISOString() })
-                .eq("id", body.session_id),
+            const eventType = (body.event_type || "click").slice(0, 50);
+            const insert = sb.from("analytics_events").insert({
+              session_id: body.session_id,
+              event_type: eventType,
+              target_tag: body.target_tag?.slice(0, 50),
+              target_id: body.target_id?.slice(0, 200),
+              target_class: body.target_class?.slice(0, 300),
+              target_text: body.target_text?.slice(0, 300),
+              path: body.path?.slice(0, 500),
+              data: body.data ?? null,
+            });
+
+            const [{ error: e1 }, updateRes] = await Promise.all([
+              insert,
+              LAST_EVENT_TYPES.has(eventType)
+                ? sb
+                    .from("analytics_sessions")
+                    .update({ last_event_at: new Date().toISOString() })
+                    .eq("id", body.session_id)
+                : Promise.resolve({ error: null }),
             ]);
             if (e1) return json({ error: e1.message }, 500);
+            if (updateRes.error) return json({ error: updateRes.error.message }, 500);
             return json({ ok: true });
           }
 
