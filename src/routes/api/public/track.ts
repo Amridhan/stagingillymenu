@@ -41,7 +41,7 @@ export const Route = createFileRoute("/api/public/track")({
         try {
           const raw = await request.text();
           const body = JSON.parse(raw || "{}") as {
-            action: "start" | "event" | "heartbeat";
+            action: "start" | "event" | "heartbeat" | "discard";
             session_id?: string;
             device_id?: string;
             user_agent?: string;
