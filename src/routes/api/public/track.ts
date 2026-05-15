@@ -41,7 +41,7 @@ export const Route = createFileRoute("/api/public/track")({
         try {
           const raw = await request.text();
           const body = JSON.parse(raw || "{}") as {
-            action: "start" | "event" | "heartbeat";
+            action: "start" | "event" | "heartbeat" | "discard";
             session_id?: string;
             device_id?: string;
             user_agent?: string;
@@ -96,6 +96,14 @@ export const Route = createFileRoute("/api/public/track")({
           }
 
           if (!body.session_id) return json({ error: "session_id required" }, 400);
+
+          if (body.action === "discard") {
+            // Remove a passive (no-interaction) session row + its events so
+            // the table only contains sessions with real engagement.
+            await sb.from("analytics_events").delete().eq("session_id", body.session_id);
+            await sb.from("analytics_sessions").delete().eq("id", body.session_id);
+            return json({ ok: true });
+          }
 
           if (body.action === "heartbeat") {
             await sb
