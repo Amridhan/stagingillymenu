@@ -258,48 +258,6 @@ function AdminPage() {
     }
   }
 
-  if (authChecking) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
-        Loading…
-      </div>
-    );
-  }
-
-  if (!authed) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <form
-          onSubmit={handleLogin}
-          className="w-full max-w-sm space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm"
-        >
-          <div>
-            <h1 className="text-lg font-semibold text-foreground">Admin sign in</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Enter the admin password to view analytics.
-            </p>
-          </div>
-          <input
-            type="password"
-            autoFocus
-            value={loginPassword}
-            onChange={(e) => setLoginPassword(e.target.value)}
-            placeholder="Password"
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
-          />
-          {loginError && <p className="text-sm text-destructive">{loginError}</p>}
-          <button
-            type="submit"
-            disabled={loggingIn || !loginPassword}
-            className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-          >
-            {loggingIn ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
-      </div>
-    );
-  }
-
   const { stats, sessions, recentSessions, sessionDuration, sessionDisplayStartedAt } = useMemo(() => {
     const matchesDayFilter = (iso: string) => {
       if (dayFilter === "all") return true;
@@ -607,6 +565,48 @@ function AdminPage() {
         : dayFilter === "weekends"
           ? " · weekends only"
           : ` · ${WEEKDAY_LABEL[dayFilter]}s only`;
+
+  if (authChecking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        Loading…
+      </div>
+    );
+  }
+
+  if (!authed) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <form
+          onSubmit={handleLogin}
+          className="w-full max-w-sm space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm"
+        >
+          <div>
+            <h1 className="text-lg font-semibold text-foreground">Admin sign in</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Enter the admin password to view analytics.
+            </p>
+          </div>
+          <input
+            type="password"
+            autoFocus
+            value={loginPassword}
+            onChange={(e) => setLoginPassword(e.target.value)}
+            placeholder="Password"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+          />
+          {loginError && <p className="text-sm text-destructive">{loginError}</p>}
+          <button
+            type="submit"
+            disabled={loggingIn || !loginPassword}
+            className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+          >
+            {loggingIn ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-6 text-foreground">
