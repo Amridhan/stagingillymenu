@@ -38,7 +38,13 @@ export const Route = createFileRoute("/admin")({
 });
 
 const BOUNCE_SECONDS = 10;
-const REAL_ENGAGEMENT_EVENTS = new Set(["lightbox_open", "lightbox_close", "hover"]);
+const REAL_ENGAGEMENT_EVENTS = new Set([
+  "lightbox_open",
+  "lightbox_close",
+  "hover",
+  "time_on_page",
+  "session_end",
+]);
 
 const TZ = "Asia/Dubai"; // Gulf Standard Time (UTC+4)
 const EXCLUDED_SESSION_IDS = new Set<string>([
@@ -289,14 +295,15 @@ function AdminPage() {
       }
     }
 
-    // Sessions that opened at least one lightbox — never bounces.
+    // Sessions that contain explicit engagement/end timing — never bounces.
     const sessionsWithLightbox = new Set(clicks.map((e) => e.session_id));
+    const engagedSessionIds = new Set(events.filter((e) => REAL_ENGAGEMENT_EVENTS.has(e.event_type)).map((e) => e.session_id));
 
-    // Bounce: shorter than threshold AND no lightbox opened.
+    // Bounce: shorter than threshold AND no real engagement recorded.
     const bouncedIds = new Set<string>();
     for (const s of visits) {
       const sec = sessionDuration[s.id] ?? 0;
-      if (sec < BOUNCE_SECONDS && !sessionsWithLightbox.has(s.id)) {
+      if (sec < BOUNCE_SECONDS && !engagedSessionIds.has(s.id)) {
         bouncedIds.add(s.id);
       }
     }
