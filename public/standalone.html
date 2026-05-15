@@ -10114,7 +10114,7 @@
         }
 
         function reportSessionEnd() {
-          if (!sessionId || sessionEndReported || !lastActivity || !sessionStartedAt) return;
+          if (!sessionId || sessionEndReported || !sessionStartedAt) return;
           sessionEndReported = true;
           track({
             event_type: "session_end",
