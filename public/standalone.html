@@ -10064,13 +10064,15 @@
         // The kiosk fires programmatic window.scrollTo() (idle reset, section
         // snap), which dispatches a synthetic "scroll" event and would falsely
         // mark the session as active. Only direct user input counts.
-        ["pointerdown", "mousedown", "keydown", "touchstart", "click"].forEach(function (ev) {
+        function markActive() { lastActivity = Date.now(); }
+        window.__markActive = markActive;
+        ["pointerdown", "mousedown", "keydown", "touchstart", "touchend", "touchmove", "click"].forEach(function (ev) {
           window.addEventListener(
             ev,
             function (e) {
-              // Ignore synthetic events (e.g. programmatic .click()).
+              // Ignore synthetic events (e.g. programmatic .click() or scroll).
               if (e && e.isTrusted === false) return;
-              lastActivity = Date.now();
+              markActive();
             },
             { passive: true, capture: true },
           );
