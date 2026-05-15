@@ -10060,17 +10060,21 @@
         var totalActiveMs = 0;
         var lastActivity = 0;
         var timeReported = false;
-        ["mousemove", "mousedown", "keydown", "scroll", "touchstart", "click", "wheel"].forEach(
-          function (ev) {
-            window.addEventListener(
-              ev,
-              function () {
-                lastActivity = Date.now();
-              },
-              { passive: true, capture: true },
-            );
-          },
-        );
+        // IMPORTANT: do NOT include "scroll", "mousemove", or "wheel" here.
+        // The kiosk fires programmatic window.scrollTo() (idle reset, section
+        // snap), which dispatches a synthetic "scroll" event and would falsely
+        // mark the session as active. Only direct user input counts.
+        ["pointerdown", "mousedown", "keydown", "touchstart", "click"].forEach(function (ev) {
+          window.addEventListener(
+            ev,
+            function (e) {
+              // Ignore synthetic events (e.g. programmatic .click()).
+              if (e && e.isTrusted === false) return;
+              lastActivity = Date.now();
+            },
+            { passive: true, capture: true },
+          );
+        });
         setInterval(function () {
           if (document.hidden || !lastActivity) return;
           if (Date.now() - lastActivity > IDLE_MS) return;
