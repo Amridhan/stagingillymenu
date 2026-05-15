@@ -9827,6 +9827,8 @@
         var startRequested = false;
         var sessionStartedAt = 0;
         var sessionEndReported = false;
+        var sessionSeq = 0;
+        var realActivitySeen = false;
 
         // Persistent per-tablet ID. Stored in localStorage so it survives reloads,
         // session timeouts, and kiosk auto-restarts. Only cleared by a full
@@ -9899,6 +9901,7 @@
         function start() {
           if (sessionId || startRequested || document.hidden) return;
           startRequested = true;
+          var seq = ++sessionSeq;
           sessionStartedAt = Date.now();
           fetch(ENDPOINT, {
             method: "POST",
@@ -9917,30 +9920,39 @@
               return r.json();
             })
             .then(function (j) {
+              if (seq !== sessionSeq) return;
               sessionId = j.session_id;
               flushQueue();
             })
             .catch(function () {
+              if (seq !== sessionSeq) return;
               startRequested = false;
               sessionStartedAt = 0;
             });
+        }
+
+        function restartSessionForInteraction() {
+          sessionSeq++;
+          sessionId = null;
+          startRequested = false;
+          sessionStartedAt = 0;
+          sessionEndReported = false;
+          queue = [];
+          start();
         }
 
         // Generic event sender — queues until session is ready.
         function track(payload) {
           payload.action = "event";
           payload.path = location.pathname + location.search;
-          // Explicit engagement events (lightbox_open/close, hover) mark the
-          // user as active. section_view is excluded because the first section
-          // auto-fires on load without any real interaction, which would
-          // otherwise turn idle/bounced page loads into "active" sessions.
+          // Only explicit menu engagement marks the session active. Passive
+          // kiosk events (section_view, scroll_depth) must not extend visits.
           if (
-            payload.event_type &&
-            payload.event_type !== "time_on_page" &&
-            payload.event_type !== "section_view" &&
-            payload.event_type !== "session_end"
+            payload.event_type === "lightbox_open" ||
+            payload.event_type === "lightbox_close" ||
+            payload.event_type === "hover"
           ) {
-            try { window.__markActive && window.__markActive(); } catch (_) {}
+            try { window.__noteRealActivity && window.__noteRealActivity(); } catch (_) {}
           }
           if (!sessionId) {
             if (payload.event_type === "section_view") return;
