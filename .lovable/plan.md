@@ -1,46 +1,38 @@
-## Password-protect /admin and admin APIs
+## Add hidden 5-tap Device Code reveal to /open-menu
 
-Use a signed httpOnly cookie tied to `ADMIN_PASSWORD`. No DB changes, no Supabase Auth, no schema migration.
+Single-file change to `src/routes/open-menu.tsx`. No other files touched.
 
-### New files
+### Changes to `src/routes/open-menu.tsx`
 
-**`src/lib/admin-auth.ts`** — shared server helpers:
-- `ADMIN_COOKIE = "illy_admin"`
-- `getAdminPassword()` → reads `process.env.ADMIN_PASSWORD`; throws if missing
-- `signToken(password)` → HMAC-SHA256 over a fixed payload (`"admin"`) using the password as key, returns hex
-- `isAuthed(request)` → reads cookie via `getCookie`, recomputes expected token, `timingSafeEqual` compare
-- `requireAdmin(request)` → returns `Response("Unauthorized", { status: 401 })` if not authed, else `null`
-- If `ADMIN_PASSWORD` is unset, helpers fail closed (return 401 / never authenticate).
+Keep all existing logic (device id read/create, `?pair=1` chip). Add:
 
-**`src/routes/api/admin/login.ts`** — POST handler:
-- Reads `{ password }` from body
-- Compares with `timingSafeEqual` against `ADMIN_PASSWORD`
-- On success: `setCookie(ADMIN_COOKIE, token, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 60*60*24*7 })` and returns `{ ok: true }`
-- On failure: 401
-- If `ADMIN_PASSWORD` missing: 503 `{ error: "Admin not configured" }`
+1. **Invisible tap zone** — a `<div>` rendered as a sibling of the iframe and chip:
+   - Fixed position, `top: 0; right: 0; width: 48px; height: 48px`
+   - `background: transparent`, no border, no visible content
+   - `z-index: 2147483646` (just under the chip, above the iframe)
+   - `cursor: default`
+   - Only an `onClick`/`onTouchStart` handler — does not block menu touches anywhere else
 
-**`src/routes/api/admin/logout.ts`** — POST handler: `deleteCookie(ADMIN_COOKIE)`, returns `{ ok: true }`.
+2. **Tap counter logic** (in the existing `useEffect` or a small handler):
+   - Maintain a ref `tapsRef` holding `number[]` of recent tap timestamps
+   - On each tap: push `Date.now()`, drop entries older than 5000ms
+   - If length ≥ 5 → reveal the chip and clear the array
 
-### Changed files
+3. **Reveal state**:
+   - Reuse the existing `pairCode` state. Add a second state `revealed` (boolean) that drives the chip visibility independently from `?pair=1`
+   - Compute the code once on mount from the device id (8 chars, dashes stripped, uppercased) — same format already used for `?pair=1`
+   - If `?pair=1`: set `revealed = true` immediately (no auto-hide, matches current behavior)
+   - On 5-tap: set `revealed = true` and start a 120,000ms `setTimeout` to set it back to `false`. Clear any prior timeout if re-triggered.
 
-**`src/routes/api/admin/stats.ts`** — at top of POST handler, call `requireAdmin(request)`; if it returns a Response, return it. No other logic changes.
-
-**`src/routes/api/admin/device.ts`** — same `requireAdmin(request)` gate at top of POST handler.
-
-**`src/routes/admin.tsx`** — add a small client-side gate:
-- New `useState` for `authed` (default `false`) and `checking` (default `true`).
-- On mount, do a lightweight probe: `fetch("/api/admin/stats", { method: "POST", body: "{}" })`; if 401 → show `<LoginForm />`, else mark authed and run existing `load()`.
-- `LoginForm` posts to `/api/admin/login`; on success sets `authed=true` and calls `load()`.
-- Existing analytics UI renders only when `authed`. No changes to analytics rendering or queries.
+4. **Chip rendering**: render the existing chip when `revealed === true`. Same styling as today (`Device Code: XXXXXXXX`, bottom-right, monospace, `pointer-events: none`).
 
 ### Untouched
-- `src/routes/api/public/track.ts` — public, unchanged.
-- `src/routes/open-menu.tsx`, `src/routes/index.tsx` — public, unchanged.
-- `public/standalone.html` — unchanged.
-- Supabase schema — unchanged.
+- `public/standalone.html`, `/api/public/track`, tracking event names
+- Supabase schema, admin dashboard, admin auth
+- `/`, menu data, menu design
+- Device id storage keys (`aycilly.analytics.device.v1`, `aycilly_analytics_device`) and the read-or-create flow
 
-### Security notes
-- Cookie is httpOnly + secure + SameSite=Lax, path `/`, 7-day expiry.
-- Token = HMAC(password, "admin"); since the secret never leaves the server, the cookie cannot be forged without `ADMIN_PASSWORD`.
-- All comparisons use `crypto.timingSafeEqual`.
-- If `ADMIN_PASSWORD` is unset, every admin endpoint returns 401/503; no admin data is exposed.
+### Behavior summary
+- `/open-menu` (no query): chip hidden. 5 taps in top-right 48×48 within 5s → chip shows for 120s then hides.
+- `/open-menu?pair=1`: chip shows immediately and persists (unchanged).
+- Tracking: iframe still posts to `/api/public/track` with the same `device_id`. The new tap zone only handles clicks in the 48×48 top-right corner; the rest of the iframe is fully interactive.
