@@ -9907,7 +9907,7 @@
         }
 
         function start() {
-          if (sessionId || startRequested || document.hidden) return;
+          if (!realActivitySeen || sessionId || startRequested || document.hidden) return;
           startRequested = true;
           var seq = ++sessionSeq;
           sessionId = makeId();
@@ -10182,11 +10182,12 @@
           } else {
             timeReported = false; // allow another flush if they leave again
             sessionEndReported = false;
-            start();
           }
         });
 
-        start();
+        // Sessions start only after trusted human input. Passive page loads,
+        // automatic section views, and WebView preload/restore events do not
+        // create analytics sessions.
       })();
     </script>
   </body>
