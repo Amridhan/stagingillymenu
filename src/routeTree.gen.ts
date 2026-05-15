@@ -9,12 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as OpenMenuRouteImport } from './routes/open-menu'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiPublicTrackRouteImport } from './routes/api/public/track'
 import { Route as ApiAdminStatsRouteImport } from './routes/api/admin/stats'
 import { Route as ApiAdminDeviceRouteImport } from './routes/api/admin/device'
 
+const OpenMenuRoute = OpenMenuRouteImport.update({
+  id: '/open-menu',
+  path: '/open-menu',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -44,6 +50,7 @@ const ApiAdminDeviceRoute = ApiAdminDeviceRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/open-menu': typeof OpenMenuRoute
   '/api/admin/device': typeof ApiAdminDeviceRoute
   '/api/admin/stats': typeof ApiAdminStatsRoute
   '/api/public/track': typeof ApiPublicTrackRoute
@@ -51,6 +58,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/open-menu': typeof OpenMenuRoute
   '/api/admin/device': typeof ApiAdminDeviceRoute
   '/api/admin/stats': typeof ApiAdminStatsRoute
   '/api/public/track': typeof ApiPublicTrackRoute
@@ -59,6 +67,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/open-menu': typeof OpenMenuRoute
   '/api/admin/device': typeof ApiAdminDeviceRoute
   '/api/admin/stats': typeof ApiAdminStatsRoute
   '/api/public/track': typeof ApiPublicTrackRoute
@@ -68,6 +77,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/open-menu'
     | '/api/admin/device'
     | '/api/admin/stats'
     | '/api/public/track'
@@ -75,6 +85,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin'
+    | '/open-menu'
     | '/api/admin/device'
     | '/api/admin/stats'
     | '/api/public/track'
@@ -82,6 +93,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin'
+    | '/open-menu'
     | '/api/admin/device'
     | '/api/admin/stats'
     | '/api/public/track'
@@ -90,6 +102,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  OpenMenuRoute: typeof OpenMenuRoute
   ApiAdminDeviceRoute: typeof ApiAdminDeviceRoute
   ApiAdminStatsRoute: typeof ApiAdminStatsRoute
   ApiPublicTrackRoute: typeof ApiPublicTrackRoute
@@ -97,6 +110,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/open-menu': {
+      id: '/open-menu'
+      path: '/open-menu'
+      fullPath: '/open-menu'
+      preLoaderRoute: typeof OpenMenuRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin': {
       id: '/admin'
       path: '/admin'
@@ -138,6 +158,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  OpenMenuRoute: OpenMenuRoute,
   ApiAdminDeviceRoute: ApiAdminDeviceRoute,
   ApiAdminStatsRoute: ApiAdminStatsRoute,
   ApiPublicTrackRoute: ApiPublicTrackRoute,
@@ -145,3 +166,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
