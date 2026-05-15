@@ -10092,7 +10092,7 @@
         function noteRealActivity() {
           if (!realActivitySeen) {
             realActivitySeen = true;
-            restartSessionForInteraction();
+            activeStartedAt = Date.now();
           }
           lastActivity = Date.now();
         }
@@ -10129,7 +10129,7 @@
           sessionEndReported = true;
           track({
             event_type: "session_end",
-            data: { ms: Math.max(0, Date.now() - sessionStartedAt) },
+            data: { ms: Math.max(0, Date.now() - (activeStartedAt || sessionStartedAt)) },
           });
         }
 
