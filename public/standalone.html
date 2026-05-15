@@ -9939,6 +9939,19 @@
             });
         }
 
+        function closeCurrentSession() {
+          sessionSeq++;
+          sessionId = null;
+          startRequested = false;
+          sessionStartedAt = 0;
+          sessionEndReported = false;
+          realActivitySeen = false;
+          totalActiveMs = 0;
+          lastActivity = 0;
+          timeReported = false;
+          queue = [];
+        }
+
         // Generic event sender — queues until session is ready.
         function track(payload) {
           payload.action = "event";
