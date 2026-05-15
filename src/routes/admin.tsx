@@ -200,7 +200,7 @@ function AdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { stats, sessions, recentSessions, sessionDuration } = useMemo(() => {
+  const { stats, sessions, recentSessions, sessionDuration, sessionDisplayStartedAt } = useMemo(() => {
     const matchesDayFilter = (iso: string) => {
       if (dayFilter === "all") return true;
       if (dayFilter === "weekdays" || dayFilter === "weekends") {
@@ -482,7 +482,7 @@ function AdminPage() {
         sectionSeries,
       },
       sessions,
-      recentSessions: visits,
+      recentSessions: sessions,
       sessionDuration,
       sessionDisplayStartedAt,
     };
