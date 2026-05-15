@@ -60,12 +60,14 @@ export const Route = createFileRoute("/api/public/track")({
           const sb = admin();
 
           if (body.action === "start") {
+            const session_id = body.session_id?.slice(0, 100) ?? null;
             const user_agent = body.user_agent?.slice(0, 500) ?? null;
             const referrer = body.referrer?.slice(0, 500) ?? null;
             const screen = body.screen?.slice(0, 50) ?? null;
             const language = body.language?.slice(0, 20) ?? null;
             const path = body.path?.slice(0, 500) ?? null;
             const device_id = body.device_id?.slice(0, 100) ?? null;
+            if (!session_id) return json({ error: "session_id required" }, 400);
 
             // Upsert device row (track first/last seen).
             if (device_id) {
@@ -77,22 +79,23 @@ export const Route = createFileRoute("/api/public/track")({
                 );
             }
 
-            // No dedup: every `start` request creates a new session. Kiosk
-            // re-inits within the same visit will produce separate sessions.
-            const { data, error } = await sb
+            // Client-generated id makes retried/duplicated start beacons
+            // idempotent while still keeping separate real visits separate.
+            const { error } = await sb
               .from("analytics_sessions")
-              .insert({ user_agent, referrer, screen, language, device_id })
-              .select("id")
-              .single();
+              .upsert(
+                { id: session_id, user_agent, referrer, screen, language, device_id },
+                { onConflict: "id", ignoreDuplicates: true },
+              );
             if (error) return json({ error: error.message }, 500);
 
             // Also log a page_load event, once for this created session.
             await sb.from("analytics_events").insert({
-              session_id: data.id,
+              session_id,
               event_type: "page_load",
               path,
             });
-            return json({ session_id: data.id });
+            return json({ session_id });
           }
 
           if (!body.session_id) return json({ error: "session_id required" }, 400);
