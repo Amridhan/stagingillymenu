@@ -9921,11 +9921,15 @@
         function track(payload) {
           payload.action = "event";
           payload.path = location.pathname + location.search;
-          // Any explicit engagement event (lightbox_open/close, hover,
-          // section_view triggered by real scrolling) also marks the user as
-          // active. This rescues sessions where taps happen inside iframes and
-          // never reach the parent window's input listeners.
-          if (payload.event_type && payload.event_type !== "time_on_page") {
+          // Explicit engagement events (lightbox_open/close, hover) mark the
+          // user as active. section_view is excluded because the first section
+          // auto-fires on load without any real interaction, which would
+          // otherwise turn idle/bounced page loads into "active" sessions.
+          if (
+            payload.event_type &&
+            payload.event_type !== "time_on_page" &&
+            payload.event_type !== "section_view"
+          ) {
             try { window.__markActive && window.__markActive(); } catch (_) {}
           }
           if (!sessionId) {
