@@ -43,6 +43,7 @@ export const Route = createFileRoute("/api/public/track")({
           const body = JSON.parse(raw || "{}") as {
             action: "start" | "event" | "heartbeat" | "discard";
             session_id?: string;
+            discard_session_id?: string;
             device_id?: string;
             user_agent?: string;
             referrer?: string;
@@ -88,6 +89,12 @@ export const Route = createFileRoute("/api/public/track")({
                 { onConflict: "id", ignoreDuplicates: true },
               );
             if (error) return json({ error: error.message }, 500);
+
+            if (body.discard_session_id && body.discard_session_id !== session_id) {
+              const discardId = body.discard_session_id.slice(0, 100);
+              await sb.from("analytics_events").delete().eq("session_id", discardId);
+              await sb.from("analytics_sessions").delete().eq("id", discardId);
+            }
 
             // Also log a page_load event, once for this created session.
             await sb.from("analytics_events").insert({
