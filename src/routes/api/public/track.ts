@@ -63,6 +63,31 @@ export const Route = createFileRoute("/api/public/track")({
               );
             }
 
+            // Dedupe: kiosk WebViews can load /standalone.html in two browsing
+            // contexts at once (top-level + the iframe inside /). On a fresh
+            // localStorage both contexts race, mint different device_ids, and
+            // POST `start` in parallel — producing a duplicate session every
+            // visit. If this device already has a session in the last 60s,
+            // reuse it instead of inserting a new row.
+            if (device_id) {
+              const sixtySecondsAgo = new Date(Date.now() - 60_000).toISOString();
+              const { data: existing } = await sb
+                .from("analytics_sessions")
+                .select("id")
+                .eq("device_id", device_id)
+                .gte("started_at", sixtySecondsAgo)
+                .order("started_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (existing?.id) {
+                await sb
+                  .from("analytics_sessions")
+                  .update({ last_event_at: new Date().toISOString() })
+                  .eq("id", existing.id);
+                return json({ session_id: existing.id });
+              }
+            }
+
             const { data, error } = await sb
               .from("analytics_sessions")
               .insert({ user_agent, referrer, screen, language, device_id })
