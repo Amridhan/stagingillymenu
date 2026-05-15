@@ -9829,6 +9829,7 @@
         var sessionEndReported = false;
         var sessionSeq = 0;
         var realActivitySeen = false;
+        var pendingDiscardSessionId = null;
 
         // Persistent per-tablet ID. Stored in localStorage so it survives reloads,
         // session timeouts, and kiosk auto-restarts. Only cleared by a full
@@ -9864,10 +9865,11 @@
           }
         }
 
-        function makeId(prefix) {
-          return crypto && crypto.randomUUID
-            ? crypto.randomUUID()
-            : prefix + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+        function makeId() {
+          if (crypto && crypto.randomUUID) return crypto.randomUUID();
+          return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, function (c) {
+            return (Number(c) ^ (Math.random() * 16 >> (Number(c) / 4))).toString(16);
+          });
         }
 
         function flushQueue() {
@@ -9908,11 +9910,12 @@
           if (sessionId || startRequested || document.hidden) return;
           startRequested = true;
           var seq = ++sessionSeq;
-          sessionId = makeId("s-");
+          sessionId = makeId();
           sessionStartedAt = Date.now();
           send({
             action: "start",
             session_id: sessionId,
+            discard_session_id: pendingDiscardSessionId,
             device_id: deviceId,
             user_agent: navigator.userAgent,
             referrer: document.referrer || null,
@@ -9920,6 +9923,7 @@
             language: navigator.language,
             path: location.pathname + location.search,
           });
+          pendingDiscardSessionId = null;
           startRequested = false;
           if (seq === sessionSeq) flushQueue();
         }
