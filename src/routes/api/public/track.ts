@@ -75,10 +75,11 @@ export const Route = createFileRoute("/api/public/track")({
                 );
             }
 
-            // Dedupe: kiosk WebViews can open the same menu through two
-            // contexts/hosts at once. That can mint different device IDs, so
-            // dedupe by same-device OR same screen + normalized browser/model
-            // fingerprint within the last minute.
+            // Dedupe: only collapse sessions when they come from the SAME
+            // device. Different physical kiosks frequently share UA + screen
+            // (same Android model, same resolution), so a UA-based fingerprint
+            // wrongly merges them. Only fall back to the fingerprint when no
+            // device_id is provided at all.
             const sixtySecondsAgo = new Date(Date.now() - 60_000).toISOString();
             const requestFingerprint = trackingFingerprint(user_agent, screen);
             const { data: recentSessions } = await sb
@@ -87,11 +88,11 @@ export const Route = createFileRoute("/api/public/track")({
               .gte("started_at", sixtySecondsAgo)
               .order("started_at", { ascending: false })
               .limit(25);
-            const existing = (recentSessions ?? []).find(
-              (s) =>
-                (device_id && s.device_id === device_id) ||
-                trackingFingerprint(s.user_agent, s.screen) === requestFingerprint,
-            );
+            const existing = (recentSessions ?? []).find((s) => {
+              if (device_id) return s.device_id === device_id;
+              if (s.device_id) return false;
+              return trackingFingerprint(s.user_agent, s.screen) === requestFingerprint;
+            });
             if (existing?.id) return json({ session_id: existing.id });
 
             const { data, error } = await sb
@@ -110,11 +111,11 @@ export const Route = createFileRoute("/api/public/track")({
               .gte("started_at", sixtySecondsAgo)
               .order("started_at", { ascending: true })
               .limit(50);
-            const canonical = (competingSessions ?? []).find(
-              (s) =>
-                (device_id && s.device_id === device_id) ||
-                trackingFingerprint(s.user_agent, s.screen) === requestFingerprint,
-            );
+            const canonical = (competingSessions ?? []).find((s) => {
+              if (device_id) return s.device_id === device_id;
+              if (s.device_id) return false;
+              return trackingFingerprint(s.user_agent, s.screen) === requestFingerprint;
+            });
             if (canonical?.id && canonical.id !== data.id) {
               await sb.from("analytics_sessions").delete().eq("id", data.id);
               return json({ session_id: canonical.id });
