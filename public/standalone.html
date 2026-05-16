@@ -7564,9 +7564,16 @@ Accompanied with:
         lbd.style.color = "#000000";
         lbd.style.webkitFontSmoothing = "antialiased";
         document.getElementById("lb-sub").textContent = d.sub;
-        document.getElementById("lb-img").innerHTML = d.img
-          ? '<img src="' + d.img + '" alt="' + d.name.replace(/"/g, "&quot;") + '">'
-          : PH;
+        var lbImg = document.getElementById("lb-img");
+        if (d.img) {
+          lbImg.innerHTML =
+            '<img data-menu-img="1" data-src="' + d.img + '" src="' + d.img +
+            '" alt="' + d.name.replace(/"/g, "&quot;") + '">';
+          var im = lbImg.querySelector('img');
+          if (window.__illyLoadImg) window.__illyLoadImg(im);
+        } else {
+          lbImg.innerHTML = PH;
+        }
         var el = document.getElementById("lb-pricing");
         var DH =
           '<svg width="13" height="11" viewBox="0 0 1000 870" style="display:inline-block;vertical-align:middle;margin-right:2px"><path fill="#D12420" d="' +

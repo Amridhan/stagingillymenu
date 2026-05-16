@@ -1,16 +1,16 @@
-/* illy menu service worker — cache-first for /menu-images/* */
-const VERSION = 'v3';
+/* illy menu service worker — safe cache for /menu-images/*
+ * Rules:
+ *  - Only intercept GET /menu-images/*
+ *  - Cache-first when a 200 is cached; revalidate in background
+ *  - On cold miss, fetch from network and only cache 200 image/* responses
+ *  - On network failure, DO NOT synthesize a response — let the browser
+ *    surface a real error so the page's loader can retry cleanly.
+ */
+const VERSION = 'v4';
 const IMG_CACHE = 'illy-menu-images-' + VERSION;
-const PRECACHE = ["/menu-images/illycrema_Classic_Small.webp", "/menu-images/illycrema_Trio.webp", "/menu-images/illycrema_Nuvola.webp", "/menu-images/Signature_Strawberry_Matcha.webp", "/menu-images/Signature_Blueberry_Matcha.webp", "/menu-images/Cloud_Matcha_Coconut_Water.webp", "/menu-images/Cloud_Matcha_Coconut_Milk.webp", "/menu-images/Matcha_Passion_Lemonade.webp"];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil((async () => {
-    try {
-      const c = await caches.open(IMG_CACHE);
-      await Promise.allSettled(PRECACHE.map((u) => c.add(new Request(u, { cache: 'reload' }))));
-    } catch (e) { /* noop */ }
-    self.skipWaiting();
-  })());
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -31,6 +31,12 @@ function isMenuImage(url) {
   } catch (e) { return false; }
 }
 
+function isCacheable(resp) {
+  if (!resp || !resp.ok || resp.status !== 200) return false;
+  const ct = resp.headers.get('content-type') || '';
+  return ct.indexOf('image/') === 0;
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
@@ -40,36 +46,17 @@ self.addEventListener('fetch', (event) => {
     const cache = await caches.open(IMG_CACHE);
     const cached = await cache.match(req, { ignoreSearch: true });
     if (cached) {
-      // Revalidate in background; never block paint
       event.waitUntil((async () => {
         try {
           const fresh = await fetch(req, { cache: 'no-cache' });
-          if (fresh && fresh.ok) cache.put(req, fresh.clone());
+          if (isCacheable(fresh)) cache.put(req, fresh.clone());
         } catch (e) { /* offline ok */ }
       })());
       return cached;
     }
-    try {
-      const fresh = await fetch(req);
-      if (fresh && fresh.ok) cache.put(req, fresh.clone());
-      return fresh;
-    } catch (e) {
-      // Last resort: 1x1 transparent gif so onerror handler runs
-      return new Response(
-        Uint8Array.from(atob('R0lGODlhAQABAAAAACw='), c => c.charCodeAt(0)),
-        { status: 504, headers: { 'Content-Type': 'image/gif' } }
-      );
-    }
+    // No cache: pass through to the network. Only cache real 200 image/* responses.
+    const fresh = await fetch(req);
+    if (isCacheable(fresh)) cache.put(req, fresh.clone());
+    return fresh;
   })());
-});
-
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'PRECACHE' && Array.isArray(event.data.urls)) {
-    event.waitUntil((async () => {
-      const cache = await caches.open(IMG_CACHE);
-      await Promise.allSettled(
-        event.data.urls.map((u) => cache.match(u).then((hit) => hit ? null : cache.add(new Request(u, { cache: 'reload' }))))
-      );
-    })());
-  }
 });
