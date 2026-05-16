@@ -996,7 +996,7 @@
           alt="illy"
           style="height: 40px; width: 40px; display: block; border-radius: 3px; flex-shrink: 0"
         />
-        <div class="logo-txt">illy Caffè &nbsp;|&nbsp; Mall of the Emirates</div>
+        <div class="logo-txt" id="logoTxt" style="cursor:default;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;">illy Caffè &nbsp;|&nbsp; Mall of the Emirates</div>
       </div>
       <nav class="mnav">
         <div class="mnav-inner">
@@ -7790,6 +7790,75 @@ Accompanied with:
      - page_load  (once per session, on initial load)
      - lightbox_open  (every menu item open, with the item name)
 */
+      /* ===== Hidden device-code reveal =====
+         5 taps on the "illy Caffè | Mall of the Emirates" header within 5s
+         reveals a pill showing this device's pairing code. Also auto-reveals
+         when the URL contains ?pair=1. Works in any environment. */
+      (function () {
+        function resolveDeviceId() {
+          var KEY = "aycilly.analytics.device.v1";
+          function cookieId() {
+            var m = document.cookie.match(/(?:^|; )aycilly_analytics_device=([^;]+)/);
+            return m ? decodeURIComponent(m[1]) : null;
+          }
+          var id = null;
+          try { id = localStorage.getItem(KEY) || cookieId(); } catch (e) { id = cookieId(); }
+          if (!id) {
+            id = (window.crypto && crypto.randomUUID)
+              ? crypto.randomUUID()
+              : "d-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+            try { localStorage.setItem(KEY, id); } catch (e) {}
+            try {
+              document.cookie = "aycilly_analytics_device=" + encodeURIComponent(id) +
+                "; Max-Age=31536000; Path=/; SameSite=Lax; Secure";
+            } catch (e) {}
+          }
+          return id;
+        }
+        var pill = null, hideTimer = null;
+        function code() {
+          return resolveDeviceId().replace(/-/g, "").slice(0, 8).toUpperCase();
+        }
+        function show() {
+          if (!pill) {
+            pill = document.createElement("div");
+            pill.setAttribute("aria-hidden", "true");
+            pill.style.cssText = [
+              "position:fixed","right:12px","bottom:12px","padding:8px 12px",
+              "background:rgba(0,0,0,0.78)","color:#fff",
+              "font:600 13px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace",
+              "letter-spacing:0.04em","border-radius:8px","pointer-events:none",
+              "z-index:2147483647","box-shadow:0 2px 8px rgba(0,0,0,0.3)"
+            ].join(";");
+            document.body.appendChild(pill);
+          }
+          pill.textContent = "Device Code: " + code();
+          if (hideTimer) clearTimeout(hideTimer);
+          hideTimer = setTimeout(function () {
+            if (pill && pill.parentNode) pill.parentNode.removeChild(pill);
+            pill = null;
+          }, 120000);
+        }
+        function wire() {
+          var el = document.getElementById("logoTxt");
+          if (!el) return;
+          var taps = [];
+          function onTap() {
+            var now = Date.now();
+            taps = taps.filter(function (t) { return now - t < 5000; });
+            taps.push(now);
+            if (taps.length >= 5) { taps = []; show(); }
+          }
+          el.addEventListener("click", onTap);
+          try {
+            if (/[?&]pair=1\b/.test(location.search)) show();
+          } catch (e) {}
+        }
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", wire);
+        } else { wire(); }
+      })();
+
       (function () {
         // Track on all public hosts (aycillymenu.lovable.app, GitHub Pages, custom domains).
         // Skip only local dev and Lovable preview/sandbox so test traffic isn't logged.
