@@ -1,45 +1,28 @@
-# Image loading — root cause and fix
+## Findings
+- The published site now serves the renamed image files correctly: every referenced `menu-images/...` URL audited from live `standalone.html` returns `200 image/*`.
+- The preview iframe also reports `184` image elements and `0` failed/broken images.
+- What users are likely still experiencing is the combination of heavy eager image loading, duplicate preload/DOM image fetching, very small placeholder/fallback assets, and the welcome overlay dimming the menu while images are still decoding.
 
-## What's actually broken
+## Plan
+1. **Fix the menu load strategy**
+   - Keep the first visible products high priority.
+   - Stop forcing every image to load eagerly at once, which can saturate the browser/network and make images appear missing or slow.
+   - Use deterministic above-the-fold eager loading and below-the-fold lazy loading.
 
-Live site `illyremixmenu.lovable.app` serves `standalone.html` correctly (200), but image requests like `/menu-images/Illycrema%20Classic.webp` return **404** on production. Locally and in dev they work, which is why this wasn't caught.
+2. **Add visible, reliable image states**
+   - Add a branded skeleton/background for image boxes while images decode.
+   - Fade images in only after `load`, so users see a stable image area instead of blank/washed-out cards.
+   - Keep the fallback only for true failures, not as a normal loading state.
 
-Proof:
-- `/menu-images/Affogato_With_Illy_Coffee.webp` → **200 OK** (underscores)
-- `/menu-images/Affogato%20Matcha.webp` → **404** (space)
-- `/menu-images/Illycrema%20Classic.webp` → **404** (space)
-- `/standalone.html`, `/_headers`, `/preview-popups.html` → all 200
+3. **Preload only critical images**
+   - Retain preload for the first screen only.
+   - Remove excessive preloading that competes with actual visible card images.
 
-So the published Cloudflare Worker asset layer is dropping (or failing to URL-decode) every file whose name contains a space. Of the 212 files in `public/menu-images/`, **158 have spaces** in their name → 158 broken images, exactly matching the placeholder gaps in your screenshots.
+4. **Add a self-check script inside the page**
+   - On page load, detect failed menu images and retry once with an absolute `/menu-images/...` URL.
+   - Log a concise warning if any image still fails, making future diagnosis immediate.
 
-All previous "image" fixes (eager loading, preload, prefetch, cache headers) were correct but irrelevant — the files simply aren't on the server.
-
-## Fix
-
-### 1. Rename every file in `public/menu-images/` to remove spaces
-
-Replace each space with `_`. Also flatten any double-encoded artifacts. Example: `Illycrema Classic.webp` → `Illycrema_Classic.webp`, `Turkey & Cheese Toast.webp` → `Turkey_&_Cheese_Toast.webp` (or `Turkey_and_Cheese_Toast.webp` to also drop the `&`, which can hit similar encoding bugs).
-
-Recommended rule: `[^A-Za-z0-9._-]+` → `_`. This kills spaces, `&`, parens, commas in one pass and guarantees URL-safety on every CDN forever.
-
-### 2. Update `public/standalone.html`
-
-Rewrite every `menu-images/...` reference (in `<link rel="preload">`, `<img src>`, `alt`, card names if used as keys, and the JS `ITEMS` array `img:` fields) to point at the renamed files. Do it with a single sweep so HTML and JS stay in sync.
-
-### 3. Re-publish
-
-Frontend assets only go live after Publish → Update.
-
-### 4. Verify
-
-After publish:
-- `curl -sI https://illyremixmenu.lovable.app/menu-images/Illycrema_Classic.webp` → expect 200
-- Reload the live page, confirm placeholders are gone across all sections.
-
-## Out of scope
-
-No changes to React routes, admin login, analytics, lightbox, ITEMS data structure beyond the image-path field, or the previous performance/caching work — all of that stays.
-
-## Open question
-
-Should renamed filenames use `_` (preserves readability: `Illycrema_Classic.webp`) or `-` (more common web convention: `illycrema-classic.webp`, lowercased)? I'll default to `_` with original casing unless you prefer the lowercase-dash style.
+5. **Verify after implementation**
+   - Re-run local reference checks: no missing files, no unsafe filenames, no broken image refs.
+   - Use the browser preview to confirm zero broken images and visible image cards.
+   - After you publish/update, the same live audit can confirm all published image URLs return `200`.
