@@ -8352,23 +8352,26 @@ Accompanied with:
   function init(){
     var imgs = document.querySelectorAll('img[data-menu-img="1"]');
     if (!imgs.length) return;
-    var lazy = [];
+    var queue = [];
     for (var i=0;i<imgs.length;i++){
       var im = imgs[i];
       if (im.getAttribute('src')) trackEager(im);
-      else lazy.push(im);
+      else queue.push(im);
     }
-    if ('IntersectionObserver' in window) {
-      var io = new IntersectionObserver(function(entries){
-        for (var k=0;k<entries.length;k++){
-          var e = entries[k];
-          if (e.isIntersecting) { io.unobserve(e.target); loadOne(e.target); }
-        }
-      }, { rootMargin: '600px 0px', threshold: 0.01 });
-      lazy.forEach(function(im){ io.observe(im); });
-    } else {
-      lazy.forEach(loadOne);
+    // Eager preload with a concurrency cap so every menu image is in the
+    // SW cache before the user clicks. Small webp files, ~150 total.
+    var MAX = 6, active = 0, idx = 0;
+    function pump(){
+      while (active < MAX && idx < queue.length){
+        var im = queue[idx++];
+        active++;
+        var done = function(){ active--; pump(); };
+        im.addEventListener('load',  done, { once: true });
+        im.addEventListener('error', done, { once: true });
+        loadOne(im);
+      }
     }
+    pump();
     window.addEventListener('load', function(){
       setTimeout(function(){
         var broken = [];
@@ -8388,8 +8391,9 @@ Accompanied with:
     if (img.getAttribute('src') && !img.getAttribute('data-src')) {
       img.setAttribute('data-src', img.getAttribute('src'));
     }
-    if (img.complete && img.naturalWidth > 0) markLoaded(img);
-    else trackEager(img);
+    if (img.complete && img.naturalWidth > 0) { markLoaded(img); return; }
+    if (img.getAttribute('src')) { trackEager(img); return; }
+    loadOne(img);
   };
 })();
 </script>
