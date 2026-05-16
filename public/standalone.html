@@ -8240,5 +8240,32 @@ Accompanied with:
 })();
 </script>
 
+
+<script>
+/* __LOVABLE_SW__ : register service worker for menu image caching */
+(function () {
+  if (!('serviceWorker' in navigator)) return;
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function (reg) {
+      function postPrecache() {
+        try {
+          var urls = [].slice.call(document.images)
+            .map(function (i) { return i.getAttribute('src'); })
+            .filter(function (s) { return s && /^\/?menu-images\//.test(s); })
+            .map(function (s) { return s.charAt(0) === '/' ? s : '/' + s; });
+          var seen = {}; urls = urls.filter(function (u) { if (seen[u]) return false; seen[u]=1; return true; });
+          var target = (reg.active || reg.waiting || reg.installing);
+          if (target && urls.length) target.postMessage({ type: 'PRECACHE', urls: urls });
+        } catch (e) { /* noop */ }
+      }
+      if (reg.active) postPrecache();
+      else if (reg.installing) reg.installing.addEventListener('statechange', function (e) {
+        if (e.target.state === 'activated') postPrecache();
+      });
+    }).catch(function () { /* noop */ });
+  });
+})();
+</script>
+
 </body>
 </html>
