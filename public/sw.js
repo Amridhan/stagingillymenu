@@ -6,7 +6,7 @@
  *  - On network failure, DO NOT synthesize a response — let the browser
  *    surface a real error so the page's loader can retry cleanly.
  */
-const VERSION = 'v4';
+const VERSION = 'v5';
 const IMG_CACHE = 'illy-menu-images-' + VERSION;
 
 self.addEventListener('install', (event) => {
