@@ -6,7 +6,7 @@
  *  - On network failure, DO NOT synthesize a response — let the browser
  *    surface a real error so the page's loader can retry cleanly.
  */
-const VERSION = 'v5';
+const VERSION = 'v6';
 const IMG_CACHE = 'illy-menu-images-' + VERSION;
 
 self.addEventListener('install', (event) => {
@@ -55,7 +55,9 @@ self.addEventListener('fetch', (event) => {
       return cached;
     }
     // No cache: pass through to the network. Only cache real 200 image/* responses.
-    const fresh = await fetch(req);
+    // Use cache:'reload' to bypass any poisoned browser HTTP cache entry
+    // (e.g. an early 0-byte/error response pinned by immutable max-age).
+    const fresh = await fetch(req, { cache: 'reload' });
     if (isCacheable(fresh)) cache.put(req, fresh.clone());
     return fresh;
   })());
