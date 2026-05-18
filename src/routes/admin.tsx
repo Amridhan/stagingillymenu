@@ -679,7 +679,11 @@ function AdminPage() {
             <h1 className="text-2xl font-semibold">Menu Analytics</h1>
             <p className="text-sm text-muted-foreground">
               {presetLabel[preset]}
-              {dayFilterLabel} · bounce = session shorter than {BOUNCE_SECONDS}s
+              {dayFilterLabel} · engaged = lightbox open, section view, scroll ≥25%, or
+              ≥15s on page
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Default reporting excludes test data before 16 May 2026, 4:40pm GST.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -761,9 +765,32 @@ function AdminPage() {
           </div>
         )}
 
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <Stat label="Page loads" value={stats.totalPageLoads} />
-          <Stat label="Sessions" value={stats.totalSessions} />
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Stat
+            label="Menu Opens"
+            value={stats.totalPageLoads}
+            sub="deduped page loads"
+          />
+          <Stat
+            label="Valid Guest Sessions"
+            value={stats.validCount}
+            sub={`${stats.rawVisits} raw visits`}
+          />
+          <Stat
+            label="Engagement Rate"
+            value={`${stats.engagementRate}%`}
+            sub={`${stats.engagedCount} engaged / ${stats.validCount} valid`}
+          />
+          <Stat
+            label="Quick Glance Rate"
+            value={`${stats.quickGlanceRate}%`}
+            sub={`${stats.quickGlanceCount} sessions`}
+          />
+          <Stat
+            label="Noise / Reload"
+            value={stats.noiseCount}
+            sub={`${stats.noiseRate}% of raw visits`}
+          />
           <Stat
             label="Avg clicks / session"
             value={stats.avgClicksPerSession}
@@ -773,11 +800,6 @@ function AdminPage() {
             label="Avg time on page"
             value={fmtMSS(stats.avgTimeOnPage)}
             sub={stats.avgTimeOnPage ? "from time_on_page" : "no data yet"}
-          />
-          <Stat
-            label="Bounce rate"
-            value={`${stats.bounceRate}%`}
-            sub={`${stats.bounces} bounced`}
           />
           <Stat
             label="Avg lightbox dwell"
