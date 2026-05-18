@@ -849,6 +849,9 @@ function AdminPage() {
         </Card>
 
         <Card title="By time of day (GST)">
+          <p className="-mt-2 mb-3 text-xs text-muted-foreground">
+            Time bands aggregate activity across all selected days.
+          </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-muted-foreground">
