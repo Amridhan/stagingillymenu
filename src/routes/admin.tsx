@@ -501,15 +501,24 @@ function AdminPage() {
       .sort((a, b) => b.sessions - a.sessions);
 
     // Combined per-item: views (lightbox_open) + avg dwell (lightbox_close)
-    type ItemAgg = { name: string; sub: string; views: number; dwellTotal: number; dwellN: number };
+    type ItemAgg = {
+      name: string;
+      sub: string;
+      sessions: Set<string>;
+      opens: number;
+      dwellTotal: number;
+      dwellN: number;
+    };
     const itemMap: Record<string, ItemAgg> = {};
     const keyOf = (sub: string, name: string) => `${sub}\u0001${name}`;
     for (const e of clicks) {
       const name = (e.target_text || "?").trim().slice(0, 80);
       const sub = (e.target_class || "").trim().slice(0, 60);
       const k = keyOf(sub, name);
-      if (!itemMap[k]) itemMap[k] = { name, sub, views: 0, dwellTotal: 0, dwellN: 0 };
-      itemMap[k].views += 1;
+      if (!itemMap[k])
+        itemMap[k] = { name, sub, sessions: new Set(), opens: 0, dwellTotal: 0, dwellN: 0 };
+      itemMap[k].opens += 1;
+      itemMap[k].sessions.add(e.session_id);
     }
     let dwellTotal = 0;
     let dwellN = 0;
@@ -521,7 +530,8 @@ function AdminPage() {
       const name = (e.target_text || "?").trim().slice(0, 80);
       const sub = (e.target_class || "").trim().slice(0, 60);
       const k = keyOf(sub, name);
-      if (!itemMap[k]) itemMap[k] = { name, sub, views: 0, dwellTotal: 0, dwellN: 0 };
+      if (!itemMap[k])
+        itemMap[k] = { name, sub, sessions: new Set(), opens: 0, dwellTotal: 0, dwellN: 0 };
       itemMap[k].dwellTotal += ms;
       itemMap[k].dwellN += 1;
     }
@@ -530,10 +540,44 @@ function AdminPage() {
       .map((d) => ({
         name: d.name,
         sub: d.sub,
-        views: d.views,
+        uniqueSessions: d.sessions.size,
+        totalOpens: d.opens,
         avgSec: d.dwellN > 0 ? Math.round(d.dwellTotal / d.dwellN / 1000) : 0,
       }))
-      .sort((a, b) => b.views - a.views);
+      .sort((a, b) => b.uniqueSessions - a.uniqueSessions || b.totalOpens - a.totalOpens);
+
+    // ---- Session classification (kiosk-aware) ----
+    const lightboxSessionIds = new Set(clicks.map((e) => e.session_id));
+    const sectionViewSessionIds = new Set(sectionEvents.map((e) => e.session_id));
+    const noiseReloadIds = new Set<string>();
+    const quickGlanceIds = new Set<string>();
+    const engagedIds = new Set<string>();
+    for (const s of visits) {
+      const sec = sessionDuration[s.id] ?? 0;
+      const maxScroll = maxScrollBySession[s.id] || 0;
+      const opened = lightboxSessionIds.has(s.id);
+      const sawSection = sectionViewSessionIds.has(s.id);
+      const meaningful = opened || sawSection || maxScroll >= 25 || sec >= 15;
+      if (sec < 3 && !meaningful) {
+        noiseReloadIds.add(s.id);
+        continue;
+      }
+      if (meaningful) engagedIds.add(s.id);
+      if (sec >= 3 && sec < 15 && !opened && !engagedIds.has(s.id)) {
+        quickGlanceIds.add(s.id);
+      }
+    }
+    const rawVisits = visits.length;
+    const noiseCount = noiseReloadIds.size;
+    const validCount = rawVisits - noiseCount;
+    const engagedCount = engagedIds.size;
+    const quickGlanceCount = quickGlanceIds.size;
+    const engagementRate =
+      validCount > 0 ? Math.round((engagedCount / validCount) * 1000) / 10 : 0;
+    const quickGlanceRate =
+      validCount > 0 ? Math.round((quickGlanceCount / validCount) * 1000) / 10 : 0;
+    const noiseRate =
+      rawVisits > 0 ? Math.round((noiseCount / rawVisits) * 1000) / 10 : 0;
 
     return {
       stats: {
