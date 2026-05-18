@@ -942,14 +942,15 @@ function AdminPage() {
                 <tr>
                   <th className="py-2">Sub Category</th>
                   <th className="py-2">Item Name</th>
-                  <th className="py-2 text-right">Number of views</th>
+                  <th className="py-2 text-right">Unique Interested Sessions</th>
+                  <th className="py-2 text-right">Total Opens</th>
                   <th className="py-2 text-right">Average dwell</th>
                 </tr>
               </thead>
               <tbody>
                 {stats.itemViews.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-4 text-muted-foreground">
+                    <td colSpan={5} className="py-4 text-muted-foreground">
                       No menu item views yet.
                     </td>
                   </tr>
@@ -962,7 +963,8 @@ function AdminPage() {
                     <td className="py-2 truncate max-w-[320px]" title={r.name}>
                       {r.name}
                     </td>
-                    <td className="py-2 text-right tabular-nums">{r.views}</td>
+                    <td className="py-2 text-right tabular-nums">{r.uniqueSessions}</td>
+                    <td className="py-2 text-right tabular-nums">{r.totalOpens}</td>
                     <td className="py-2 text-right tabular-nums">
                       {r.avgSec > 0 ? fmtMSS(r.avgSec) : "—"}
                     </td>
