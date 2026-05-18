@@ -58,6 +58,11 @@ const EXCLUDED_SESSION_IDS = new Set<string>([
   "9e974077-1a82-4f4e-b484-ea72e98ecf42",
 ]);
 
+// Production launch cutoff: anything before this is pre-launch test data
+// and is excluded from default reporting. (16 May 2026, 4:40pm GST.)
+const LAUNCH_AT = "2026-05-16T12:40:00Z";
+const LAUNCH_MS = Date.parse(LAUNCH_AT);
+
 const dayFmt = new Intl.DateTimeFormat("en-CA", {
   timeZone: TZ,
   year: "numeric",
