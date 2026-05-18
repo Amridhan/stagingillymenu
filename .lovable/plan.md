@@ -1,52 +1,102 @@
-## Menu edits in `public/standalone.html`
+## Scope
 
-All changes are copy/price/variant tweaks plus one image swap. No logic, styling, or other items touched.
+Single-file change in `src/routes/admin.tsx`. No changes to `public/standalone.html`, `/api/public/track`, tracking event names, session creation logic, Supabase schema, `/open-menu`, menu UI/content, or admin auth.
 
-### 1. Fiocco (HOT SPECIALS, lightbox id 19)
-- **Grid card** (line ~1788): change displayed price `24` → `26`.
-- **Lightbox data** (lines 6174–6184): set `price: "26"`, and remove the `{ name: "Large", price: "26" }` variant. Keep the soy/almond/oat/lactose-free (+6) and extra-shot (+4) variants.
+## 1. Launch cutoff
 
-### 2. Marocchino caldo (HOT SPECIALS, lightbox id 20)
-- **Grid card**: no change (stays AED 21).
-- **Lightbox data** (lines 6186–6195): replace the `Regular`/`Large` variants with:
-  - `{ name: "Available with soy, almond, oat drink and lactose free", price: "6" }`
-  - `{ name: "Add extra shot espresso", price: "4" }`
+Add near the existing `EXCLUDED_SESSION_IDS` (line 50):
 
-### 3. Cappuccino freddo (COLD SPECIALS, lightbox id 13)
-- **Grid card** (line ~1618): `24` → `26`.
-- **Lightbox data** (lines 6110–6118): `price: "24"` → `"26"`. Variants unchanged.
+```ts
+const LAUNCH_AT = "2026-05-16T12:40:00Z"; // 16 May 2026, 4:40pm GST
+const LAUNCH_MS = Date.parse(LAUNCH_AT);
+```
 
-### 4. Cappuccino greco (COLD SPECIALS, lightbox id 14)
-- **Grid card** (line ~1645): `24` → `26`.
-- **Lightbox data** (lines 6120–6129): `price: "24"` → `"26"`. Variants unchanged.
+Apply inside the main `useMemo` (line 261):
 
-### 5. Espresso tiramisu (COLD SPECIALS, lightbox id 17)
-- **Grid card** is already `32` — no change.
-- **Lightbox data** (lines 6151–6159): `price: "28"` → `"32"`. Variants unchanged.
+- `visits` filter (line 270): also require `new Date(s.started_at).getTime() >= LAUNCH_MS`.
+- After computing `events` (line 274–277): also require `new Date(e.created_at).getTime() >= LAUNCH_MS`.
 
-### 6. Strawberry Bake Cheesecake (DESSERTS, lightbox id 155) — image
-- Download the cheesecake image from the Google Drive folder via the linked **Illy Caffe Menu Images** connector, save it as `public/menu-images/Strawberry_Bake_Cheesecake.webp` (converting/optimizing if the source is jpg/png).
-- **Grid card** (line ~5598): replace `<img src="" alt="Strawberry Bake Cheesecake" loading="eager" …>` with the standard lazy pattern used by other dessert cards: `<img data-menu-img="1" data-src="menu-images/Strawberry_Bake_Cheesecake.webp" decoding="async" alt="Strawberry Bake Cheesecake" />`. Remove the inline `onerror` SVG fallback.
-- **Lightbox data** (line 7387): `img: ""` → `"menu-images/Strawberry_Bake_Cheesecake.webp"`.
+Because every downstream metric (page_loads, clicks, scroll, hover, sections, items, day series, band series, recent sessions) is derived from `visits` + `events`, applying the cutoff at these two source filters propagates everywhere without further changes. Devices list is unaffected (no time-bucketed metrics).
 
-### 7. Eggs Benedict (ALL DAY BREAKFAST, lightbox id 81) — price not showing
-- Root cause: lightbox renders the variants list when present. The placeholder variant `{ name: "-", price: "" }` (lines 6769–6771) suppresses the base price display.
-- Fix: change `variants: [ { name: "-", price: "" } ]` to `variants: []`. Price `47` already correct.
+Add a small note under the header `<p className="text-sm text-muted-foreground">` (line 617–620):
 
-### 8. Oats Porridge (ALL DAY BREAKFAST, lightbox id 82) — price not showing
-- Same fix as Eggs Benedict. Lines 6779–6781: change to `variants: []`. Price `49` already correct.
+```
+"Default reporting excludes test data before 16 May 2026, 4:40pm GST."
+```
 
-## Files touched
-- `public/standalone.html` — ~10 small edits.
-- `public/menu-images/Strawberry_Bake_Cheesecake.webp` — new file from Drive.
+## 2. Session classification
 
-## Out of scope
-- No changes to other menu items, loader code, lightbox renderer, service worker, routes, or styling.
-- I will NOT publish; awaiting your "publish" command after verification.
+In the same `useMemo`, after `timePerSession`, `endedMsPerSession`, and existing duration logic, compute per-session signals:
 
-## Verification (after approval & edit)
-1. Reload `/` → grid cards show: Fiocco 26, Cappuccino freddo 26, Cappuccino greco 26, Espresso tiramisu 32 (unchanged), Strawberry Cheesecake image renders.
-2. Open each lightbox: Fiocco shows base 26 + milk/extra-shot only (no Large); Marocchino caldo shows base 21 + the two new variants; Cappuccino freddo/greco show 26; Espresso tiramisu shows 32; Eggs Benedict shows 47; Oats Porridge shows 49.
+```ts
+const isMeaningfulEngagement = (sessionId) =>
+  hasEvent(sessionId, "lightbox_open") ||
+  hasEvent(sessionId, "section_view") ||
+  (maxScrollBySession[sessionId] ?? 0) >= 25 ||
+  (sessionDurationSec(sessionId) >= 15);
+```
 
-## Open question
-The Drive folder may contain multiple shots. I'll pick the most product-shot-style file; if you have a specific filename you want, tell me before I apply.
+Definitions:
+
+- **Raw Visits** = `visits.length` (post-LAUNCH_AT, post-EXCLUDED_SESSION_IDS, day-filtered).
+- **Noise / Reload Sessions** = visits where `duration < 3s` AND `!isMeaningfulEngagement`.
+- **Quick Glance Sessions** = visits where `3s ≤ duration < 15s` AND no `lightbox_open` AND not noise.
+- **Engaged Sessions** = visits where `lightbox_open` OR `section_view` OR `scroll ≥25%` OR `duration ≥ 15s`.
+- **Valid Guest Sessions** = Raw Visits − Noise/Reload.
+- **Engagement Rate** = `Engaged / Valid` (× 100, 1 decimal).
+- **Quick Glance Rate** = `QuickGlance / Valid` (× 100).
+- **Noise Rate** = `Noise / Raw Visits` (× 100).
+
+Duration source: existing `sessionDuration` / `endedMsPerSession` / `timePerSession` already give per-session ms — wrap in a small helper so all classifications use the same value.
+
+## 3. KPI cards
+
+In the `<section>` at line 701, reorganise the top cards:
+
+- Keep `Page loads` → relabel **"Menu Opens"**.
+- Replace `Sessions` with **"Valid Guest Sessions"** = `validSessions.length`; sub = `${rawVisits} raw visits`.
+- Replace `Bounce rate` card with **"Engagement Rate"**; value = `${engagementRate}%`; sub = `${engagedCount} engaged / ${validCount} valid`.
+- Add small supporting cards: **"Quick Glance Rate"** (`${quickGlanceRate}%`, sub `${count} sessions`) and **"Noise / Reload"** (`${noiseCount}`, sub `${noiseRate}% of raw`).
+- Keep `Avg clicks/session`, `Avg time on page`, `Avg lightbox dwell`.
+
+Header tagline (line 619): replace `bounce = session shorter than {BOUNCE_SECONDS}s` with engagement definition summary.
+
+`stats.bounceRate` / `stats.bounces` stay computed internally (used by per-day / per-band tables) but are no longer headline cards.
+
+## 4. Item views
+
+Rework the click aggregation (lines 494–525):
+
+```ts
+type ItemAgg = { name; sub; sessions: Set<string>; opens: number; dwellTotal; dwellN };
+itemMap[k].sessions.add(e.session_id);
+itemMap[k].opens += 1;
+```
+
+Output rows: `{ name, sub, uniqueSessions: sessions.size, totalOpens: opens, avgSec }`, sorted primarily by `uniqueSessions` desc, tiebreak `totalOpens` desc.
+
+Update the "Menu item views" table (line 850) columns:
+
+```
+Sub Category | Item Name | Unique Interested Sessions | Total Opens | Average dwell
+```
+
+Key remains `target_class + target_text` (unchanged).
+
+## 5. Per-day and per-time-band tables
+
+Keep existing columns (page loads, sessions, avg time, bounce rate) for backward-compatible debugging — the spec says preserve detailed tables.
+
+Add caption under the time-band card title:
+
+> "Time bands aggregate activity across all selected days."
+
+## Reporting back
+
+After applying I will confirm:
+1. File changed: `src/routes/admin.tsx` only.
+2. `LAUNCH_AT` constant location (next to `EXCLUDED_SESSION_IDS`, ~line 60).
+3. Exact session-classification definitions (as above).
+4. Engagement Rate formula.
+5. Item ranking formula (unique sessions primary, total opens secondary).
+6–9. Confirmation that `standalone.html`, `/api/public/track`, Supabase schema, and tracking collection were not touched.
