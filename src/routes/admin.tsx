@@ -273,11 +273,17 @@ function AdminPage() {
       return dowFmt.format(new Date(iso)) === dayFilter;
     };
     const visits = allSessions.filter(
-      (s) => !EXCLUDED_SESSION_IDS.has(s.id) && matchesDayFilter(s.started_at),
+      (s) =>
+        !EXCLUDED_SESSION_IDS.has(s.id) &&
+        new Date(s.started_at).getTime() >= LAUNCH_MS &&
+        matchesDayFilter(s.started_at),
     );
     const visibleSessionIds = new Set(visits.map((s) => s.id));
     const events = allEvents.filter(
-      (e) => visibleSessionIds.has(e.session_id) && matchesDayFilter(e.created_at),
+      (e) =>
+        visibleSessionIds.has(e.session_id) &&
+        new Date(e.created_at).getTime() >= LAUNCH_MS &&
+        matchesDayFilter(e.created_at),
     );
 
     const pageLoads = events.filter((e) => e.event_type === "page_load");
