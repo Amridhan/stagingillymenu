@@ -58,6 +58,11 @@ const EXCLUDED_SESSION_IDS = new Set<string>([
   "9e974077-1a82-4f4e-b484-ea72e98ecf42",
 ]);
 
+// Production launch cutoff: anything before this is pre-launch test data
+// and is excluded from default reporting. (16 May 2026, 4:40pm GST.)
+const LAUNCH_AT = "2026-05-16T12:40:00Z";
+const LAUNCH_MS = Date.parse(LAUNCH_AT);
+
 const dayFmt = new Intl.DateTimeFormat("en-CA", {
   timeZone: TZ,
   year: "numeric",
@@ -268,11 +273,17 @@ function AdminPage() {
       return dowFmt.format(new Date(iso)) === dayFilter;
     };
     const visits = allSessions.filter(
-      (s) => !EXCLUDED_SESSION_IDS.has(s.id) && matchesDayFilter(s.started_at),
+      (s) =>
+        !EXCLUDED_SESSION_IDS.has(s.id) &&
+        new Date(s.started_at).getTime() >= LAUNCH_MS &&
+        matchesDayFilter(s.started_at),
     );
     const visibleSessionIds = new Set(visits.map((s) => s.id));
     const events = allEvents.filter(
-      (e) => visibleSessionIds.has(e.session_id) && matchesDayFilter(e.created_at),
+      (e) =>
+        visibleSessionIds.has(e.session_id) &&
+        new Date(e.created_at).getTime() >= LAUNCH_MS &&
+        matchesDayFilter(e.created_at),
     );
 
     const pageLoads = events.filter((e) => e.event_type === "page_load");
@@ -490,15 +501,24 @@ function AdminPage() {
       .sort((a, b) => b.sessions - a.sessions);
 
     // Combined per-item: views (lightbox_open) + avg dwell (lightbox_close)
-    type ItemAgg = { name: string; sub: string; views: number; dwellTotal: number; dwellN: number };
+    type ItemAgg = {
+      name: string;
+      sub: string;
+      sessions: Set<string>;
+      opens: number;
+      dwellTotal: number;
+      dwellN: number;
+    };
     const itemMap: Record<string, ItemAgg> = {};
     const keyOf = (sub: string, name: string) => `${sub}\u0001${name}`;
     for (const e of clicks) {
       const name = (e.target_text || "?").trim().slice(0, 80);
       const sub = (e.target_class || "").trim().slice(0, 60);
       const k = keyOf(sub, name);
-      if (!itemMap[k]) itemMap[k] = { name, sub, views: 0, dwellTotal: 0, dwellN: 0 };
-      itemMap[k].views += 1;
+      if (!itemMap[k])
+        itemMap[k] = { name, sub, sessions: new Set(), opens: 0, dwellTotal: 0, dwellN: 0 };
+      itemMap[k].opens += 1;
+      itemMap[k].sessions.add(e.session_id);
     }
     let dwellTotal = 0;
     let dwellN = 0;
@@ -510,7 +530,8 @@ function AdminPage() {
       const name = (e.target_text || "?").trim().slice(0, 80);
       const sub = (e.target_class || "").trim().slice(0, 60);
       const k = keyOf(sub, name);
-      if (!itemMap[k]) itemMap[k] = { name, sub, views: 0, dwellTotal: 0, dwellN: 0 };
+      if (!itemMap[k])
+        itemMap[k] = { name, sub, sessions: new Set(), opens: 0, dwellTotal: 0, dwellN: 0 };
       itemMap[k].dwellTotal += ms;
       itemMap[k].dwellN += 1;
     }
@@ -519,15 +540,57 @@ function AdminPage() {
       .map((d) => ({
         name: d.name,
         sub: d.sub,
-        views: d.views,
+        uniqueSessions: d.sessions.size,
+        totalOpens: d.opens,
         avgSec: d.dwellN > 0 ? Math.round(d.dwellTotal / d.dwellN / 1000) : 0,
       }))
-      .sort((a, b) => b.views - a.views);
+      .sort((a, b) => b.uniqueSessions - a.uniqueSessions || b.totalOpens - a.totalOpens);
+
+    // ---- Session classification (kiosk-aware) ----
+    const lightboxSessionIds = new Set(clicks.map((e) => e.session_id));
+    const sectionViewSessionIds = new Set(sectionEvents.map((e) => e.session_id));
+    const noiseReloadIds = new Set<string>();
+    const quickGlanceIds = new Set<string>();
+    const engagedIds = new Set<string>();
+    for (const s of visits) {
+      const sec = sessionDuration[s.id] ?? 0;
+      const maxScroll = maxScrollBySession[s.id] || 0;
+      const opened = lightboxSessionIds.has(s.id);
+      const sawSection = sectionViewSessionIds.has(s.id);
+      const meaningful = opened || sawSection || maxScroll >= 25 || sec >= 15;
+      if (sec < 3 && !meaningful) {
+        noiseReloadIds.add(s.id);
+        continue;
+      }
+      if (meaningful) engagedIds.add(s.id);
+      if (sec >= 3 && sec < 15 && !opened && !engagedIds.has(s.id)) {
+        quickGlanceIds.add(s.id);
+      }
+    }
+    const rawVisits = visits.length;
+    const noiseCount = noiseReloadIds.size;
+    const validCount = rawVisits - noiseCount;
+    const engagedCount = engagedIds.size;
+    const quickGlanceCount = quickGlanceIds.size;
+    const engagementRate =
+      validCount > 0 ? Math.round((engagedCount / validCount) * 1000) / 10 : 0;
+    const quickGlanceRate =
+      validCount > 0 ? Math.round((quickGlanceCount / validCount) * 1000) / 10 : 0;
+    const noiseRate =
+      rawVisits > 0 ? Math.round((noiseCount / rawVisits) * 1000) / 10 : 0;
 
     return {
       stats: {
         totalPageLoads: pageLoads.length,
         totalSessions: sessions.length,
+        rawVisits,
+        validCount,
+        engagedCount,
+        quickGlanceCount,
+        noiseCount,
+        engagementRate,
+        quickGlanceRate,
+        noiseRate,
         totalClicks: clicks.length,
         avgClicksPerSession:
           sessions.length > 0 ? Math.round((clicks.length / sessions.length) * 10) / 10 : 0,
@@ -616,7 +679,11 @@ function AdminPage() {
             <h1 className="text-2xl font-semibold">Menu Analytics</h1>
             <p className="text-sm text-muted-foreground">
               {presetLabel[preset]}
-              {dayFilterLabel} · bounce = session shorter than {BOUNCE_SECONDS}s
+              {dayFilterLabel} · engaged = lightbox open, section view, scroll ≥25%, or
+              ≥15s on page
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Default reporting excludes test data before 16 May 2026, 4:40pm GST.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -698,9 +765,32 @@ function AdminPage() {
           </div>
         )}
 
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <Stat label="Page loads" value={stats.totalPageLoads} />
-          <Stat label="Sessions" value={stats.totalSessions} />
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Stat
+            label="Menu Opens"
+            value={stats.totalPageLoads}
+            sub="deduped page loads"
+          />
+          <Stat
+            label="Valid Guest Sessions"
+            value={stats.validCount}
+            sub={`${stats.rawVisits} raw visits`}
+          />
+          <Stat
+            label="Engagement Rate"
+            value={`${stats.engagementRate}%`}
+            sub={`${stats.engagedCount} engaged / ${stats.validCount} valid`}
+          />
+          <Stat
+            label="Quick Glance Rate"
+            value={`${stats.quickGlanceRate}%`}
+            sub={`${stats.quickGlanceCount} sessions`}
+          />
+          <Stat
+            label="Noise / Reload"
+            value={stats.noiseCount}
+            sub={`${stats.noiseRate}% of raw visits`}
+          />
           <Stat
             label="Avg clicks / session"
             value={stats.avgClicksPerSession}
@@ -710,11 +800,6 @@ function AdminPage() {
             label="Avg time on page"
             value={fmtMSS(stats.avgTimeOnPage)}
             sub={stats.avgTimeOnPage ? "from time_on_page" : "no data yet"}
-          />
-          <Stat
-            label="Bounce rate"
-            value={`${stats.bounceRate}%`}
-            sub={`${stats.bounces} bounced`}
           />
           <Stat
             label="Avg lightbox dwell"
@@ -764,6 +849,9 @@ function AdminPage() {
         </Card>
 
         <Card title="By time of day (GST)">
+          <p className="-mt-2 mb-3 text-xs text-muted-foreground">
+            Time bands aggregate activity across all selected days.
+          </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-muted-foreground">
@@ -854,14 +942,15 @@ function AdminPage() {
                 <tr>
                   <th className="py-2">Sub Category</th>
                   <th className="py-2">Item Name</th>
-                  <th className="py-2 text-right">Number of views</th>
+                  <th className="py-2 text-right">Unique Interested Sessions</th>
+                  <th className="py-2 text-right">Total Opens</th>
                   <th className="py-2 text-right">Average dwell</th>
                 </tr>
               </thead>
               <tbody>
                 {stats.itemViews.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-4 text-muted-foreground">
+                    <td colSpan={5} className="py-4 text-muted-foreground">
                       No menu item views yet.
                     </td>
                   </tr>
@@ -874,7 +963,8 @@ function AdminPage() {
                     <td className="py-2 truncate max-w-[320px]" title={r.name}>
                       {r.name}
                     </td>
-                    <td className="py-2 text-right tabular-nums">{r.views}</td>
+                    <td className="py-2 text-right tabular-nums">{r.uniqueSessions}</td>
+                    <td className="py-2 text-right tabular-nums">{r.totalOpens}</td>
                     <td className="py-2 text-right tabular-nums">
                       {r.avgSec > 0 ? fmtMSS(r.avgSec) : "—"}
                     </td>
