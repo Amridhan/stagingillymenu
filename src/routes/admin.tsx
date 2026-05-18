@@ -583,6 +583,14 @@ function AdminPage() {
       stats: {
         totalPageLoads: pageLoads.length,
         totalSessions: sessions.length,
+        rawVisits,
+        validCount,
+        engagedCount,
+        quickGlanceCount,
+        noiseCount,
+        engagementRate,
+        quickGlanceRate,
+        noiseRate,
         totalClicks: clicks.length,
         avgClicksPerSession:
           sessions.length > 0 ? Math.round((clicks.length / sessions.length) * 10) / 10 : 0,
