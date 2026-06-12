@@ -8291,12 +8291,35 @@ Accompanied with:
 /* __LOVABLE_SW__ : register service worker for menu image caching */
 (function () {
   if (!('serviceWorker' in navigator)) return;
+  // Never register the kiosk SW on Lovable preview / dev hosts — it would
+  // cache stale standalone.html in the preview iframe and serve it back
+  // on later iterations. Also unregister anything that slipped in before.
+  var h = location.hostname;
+  var isLocal = h === 'localhost' || h === '127.0.0.1' || location.protocol === 'file:';
+  var isPreview =
+    /(^|\.)lovableproject\.com$/.test(h) ||
+    /(^|\.)lovable\.dev$/.test(h) ||
+    /-preview--.*\.lovable\.app$/.test(h) ||
+    /^id-preview--/.test(h);
+  if (isLocal || isPreview) {
+    try {
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (r) {
+          if (r.active && /\/sw\.js$/.test(r.active.scriptURL)) r.unregister();
+        });
+      });
+    } catch (e) { /* noop */ }
+    return;
+  }
   window.addEventListener('load', function () {
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function (reg) {
       function postPrecache() {
         try {
-          var urls = [].slice.call(document.images)
-            .map(function (i) { return i.getAttribute('src'); })
+          // Pull from both src (already-loaded images) and data-src (lazy
+          // queue) so all 214 menu photos get warmed in the first online
+          // session, not just whatever has scrolled into view.
+          var urls = [].slice.call(document.querySelectorAll('img'))
+            .map(function (i) { return i.getAttribute('data-src') || i.getAttribute('src'); })
             .filter(function (s) { return s && /^\/?menu-images\//.test(s); })
             .map(function (s) { return s.charAt(0) === '/' ? s : '/' + s; });
           var seen = {}; urls = urls.filter(function (u) { if (seen[u]) return false; seen[u]=1; return true; });
@@ -8308,6 +8331,8 @@ Accompanied with:
       else if (reg.installing) reg.installing.addEventListener('statechange', function (e) {
         if (e.target.state === 'activated') postPrecache();
       });
+      // Run again shortly after, once the menu has rendered all <img> tags.
+      setTimeout(postPrecache, 3000);
     }).catch(function () { /* noop */ });
   });
 })();
