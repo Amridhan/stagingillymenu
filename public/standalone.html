@@ -8444,5 +8444,71 @@ Accompanied with:
 })();
 </script>
 
+<!-- Kiosk self-healing layer: boot watchdog, error trap, daily 09:00 refresh -->
+<script>
+(function(){
+  var LS = window.localStorage;
+  function lsGet(k, d){ try { var v = LS.getItem(k); return v == null ? d : v; } catch(e){ return d; } }
+  function lsSet(k, v){ try { LS.setItem(k, String(v)); } catch(e){} }
+
+  // --- Reload throttle: max 2 reloads per rolling 60 min ---
+  function canReload(reason){
+    var now = Date.now();
+    var raw = lsGet('illyReloads', '[]');
+    var arr;
+    try { arr = JSON.parse(raw); if (!Array.isArray(arr)) arr = []; } catch(e){ arr = []; }
+    arr = arr.filter(function(t){ return now - t < 60*60*1000; });
+    if (arr.length >= 2) { console.warn('[kiosk] reload suppressed (cap):', reason); return false; }
+    arr.push(now);
+    lsSet('illyReloads', JSON.stringify(arr));
+    lsSet('illyLastReloadReason', reason + '@' + new Date(now).toISOString());
+    return true;
+  }
+  function safeReload(reason){
+    if (canReload(reason)) {
+      console.warn('[kiosk] reloading:', reason);
+      setTimeout(function(){ location.reload(); }, 50);
+    }
+  }
+
+  // --- 1. Boot watchdog: no menu tiles after 10s => reload ---
+  setTimeout(function(){
+    try {
+      var tiles = document.querySelectorAll('.grid .card');
+      if (!tiles || tiles.length === 0) safeReload('boot-watchdog');
+    } catch(e){ safeReload('boot-watchdog-exc'); }
+  }, 10000);
+
+  // --- 2. Global error trap: schedule a reload 5s after a hard error ---
+  var errorScheduled = false;
+  function onHardError(label){
+    if (errorScheduled) return;
+    errorScheduled = true;
+    setTimeout(function(){ safeReload(label); }, 5000);
+  }
+  window.addEventListener('error', function(ev){
+    try { console.error('[kiosk] window.error', ev && (ev.message || ev.error)); } catch(e){}
+    onHardError('window-error');
+  });
+  window.addEventListener('unhandledrejection', function(ev){
+    try { console.error('[kiosk] unhandledrejection', ev && ev.reason); } catch(e){}
+    onHardError('unhandled-rejection');
+  });
+
+  // --- 3. Daily refresh at 09:00 local (window 09:00-09:05), once per day ---
+  var bootTime = Date.now();
+  setInterval(function(){
+    var d = new Date();
+    if (d.getHours() !== 9 || d.getMinutes() > 5) return;
+    var dayKey = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
+    if (lsGet('illyDailyDay', '') === dayKey) return;
+    // Skip if we just booted within the same window (avoid immediate reload loop)
+    if (Date.now() - bootTime < 6 * 60 * 1000) { lsSet('illyDailyDay', dayKey); return; }
+    lsSet('illyDailyDay', dayKey);
+    safeReload('daily-09:00');
+  }, 60 * 1000);
+})();
+</script>
+
 </body>
 </html>

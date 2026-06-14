@@ -1,22 +1,51 @@
-## Goal
+## Scope (revised — minimal, low-risk)
 
-Replace the image used for **Croissant Avocado and Poached Eggs** (sub-category CROISSANDWICHES) with the user-uploaded image, so it no longer shares the same image as Egg Benedict Croissant. Update both the grid card and the lightbox source.
+Three changes only. No backend changes. No new dependencies. No touching React/SSR/admin/auth/tracking.
 
-## Steps
+### 1. Switch OptiSigns devices to `/standalone.html`
 
-1. **Add the new image asset**
-   - Copy `user-uploads://Croissant_Avocado_Poached_Eggs.webp` → `public/menu-images/Croissant_Avocado_Poached_Eggs.webp`
+Config change on OptiSigns side (no code). New URL per device:
+`https://stagingillymenu.lovable.app/standalone.html`
 
-2. **Update `public/standalone.html` — grid card (line 4517)**
-   - Change `data-src="menu-images/Egg_Benedict_Croissant.webp"` → `data-src="menu-images/Croissant_Avocado_Poached_Eggs.webp"` on the `<img>` whose `alt="Croissant Avocado and Poached Eggs"`.
-   - Leave the Egg Benedict Croissant card (line 4544) untouched.
+Removes the React + SSR + iframe layers, which are the most likely cause of "worked once then blank" on Android 11 WebView.
 
-3. **Update `public/standalone.html` — ITEMS array / lightbox source (line 7065)**
-   - In the `ITEMS` entry where `name: "Croissant Avocado and Poached Eggs"`, change `img: "menu-images/Egg_Benedict_Croissant.webp"` → `img: "menu-images/Croissant_Avocado_Poached_Eggs.webp"`.
-   - The lightbox reads its image from this `ITEMS` array, so this single change fixes the lightbox.
+### 2. Bump SW cache version to `v8`
 
-## Out of scope (not touched)
+One-line change in `public/sw.js`. Required so today's price/description/image edits propagate to devices already online.
 
-- Egg Benedict Croissant item and its image
-- Any tracking, admin, schema, or `/api/public/track` code
-- Any other menu items, descriptions, prices, or layout
+### 3. Add a self-healing layer to `public/standalone.html`
+
+Three tiny guards, all in the kiosk page itself, ~30 lines total:
+
+- **Boot watchdog**: if no menu tiles have rendered within 10 seconds of page load, `location.reload()`. Capped at 2 reloads per hour via `localStorage` so a genuinely broken deploy can't loop.
+- **Global error trap**: `window.onerror` + `unhandledrejection` → schedule a reload after 5 seconds. Catches a single bad chunk crashing the page.
+- **Daily refresh at 09:00 local time**: once-per-day reload, gated so it only fires in a narrow window (09:00–09:05) and only once per day via `localStorage` flag. Standard kiosk hygiene — picks up new SW + clears any WebView leak. Skipped on devices that just booted within the same window.
+
+## Files touched
+
+- `public/sw.js` — `VERSION = 'v7'` → `'v8'`. Nothing else.
+- `public/standalone.html` — add one `<script>` block at the end with the three guards above.
+
+## Risk & rollback
+
+| Change | Risk | Rollback |
+|---|---|---|
+| OptiSigns URL → `/standalone.html` | None — config only | Change URL back |
+| `VERSION` v7 → v8 | None — intended use of the version | Bump again |
+| Watchdog + error trap + 09:00 refresh | Low — worst case a working page reloads once invisibly; caps prevent loops | Delete the script block |
+
+## What I'm explicitly NOT doing
+
+- Per-image retry / placeholder
+- Hidden diagnostics pill
+- Boot beacon to `/api/public/track`
+- SW kill switch / stale-cache eviction
+- Redirect at `/`
+- Anything in `src/routes/`, backend, or SW beyond the version bump
+
+If issues persist after 48h of monitoring, we revisit with real device data.
+
+## After this ships
+
+1. Update OptiSigns URL on every device to `/standalone.html`.
+2. Going forward: every menu edit → bump `VERSION` in `sw.js` (I'll leave a comment reminder above the constant).
