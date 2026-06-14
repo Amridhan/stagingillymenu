@@ -12,8 +12,11 @@
  *   - Page can post {type:'PRECACHE', urls:[...]} to warm the image cache
  *
  * Goal: after one online load, the kiosk works fully offline indefinitely.
+ *
+ * IMPORTANT: bump VERSION on every menu/image/content change so kiosks pick
+ * up the new assets — otherwise they keep serving the old cached version.
  */
-const VERSION = 'v7';
+const VERSION = 'v8';
 const SHELL_CACHE = 'illy-shell-' + VERSION;
 const IMG_CACHE = 'illy-menu-images-' + VERSION;
 const FONT_CACHE = 'illy-fonts-' + VERSION;
