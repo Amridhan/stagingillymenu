@@ -7697,35 +7697,23 @@ Accompanied with:
       // Start on load
       scheduleIdleCheck();
 
-      // Reset on OptiSigns playlist cycle
+      // Reset on OptiSigns playlist cycle.
+      // Also force-close any open lightbox and release the body scroll lock,
+      // otherwise a popup left open across a playlist cycle leaves
+      // `body { overflow: hidden }` in place and the page becomes unscrollable.
       document.addEventListener("visibilitychange", function () {
-        if (!document.hidden) {
-          lastScrollTime = 0;
-          resetToTop();
-        }
-      });
-
-      // set on any touch
-      ["touchstart", "touchend", "mousedown"].forEach(function (evt) {
-        document.addEventListener(
-          evt,
-          function () {
-            scrollChanged = false;
-            scheduleIdleCheck();
-          },
-          { passive: true },
-        );
-      });
-
-      // Start timer on page load
-      scheduleIdleCheck();
-
-      // Reset to top when page becomes visible (OptiSigns playlist cycle)
-      document.addEventListener("visibilitychange", function () {
-        if (!document.hidden) {
-          resetToTop();
-          scheduleIdleCheck();
-        }
+        if (document.hidden) return;
+        try {
+          var lbEl = document.getElementById("lb");
+          if (lbEl && lbEl.classList.contains("open")) {
+            cLb();
+          }
+        } catch (e) {}
+        // Defensive: always release scroll lock on return to foreground.
+        document.body.style.overflow = "";
+        lastScrollTime = 0;
+        resetToTop();
+        scheduleIdleCheck();
       });
 
       /* ===== Analytics tracking =====
