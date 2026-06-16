@@ -88,3 +88,11 @@ No customer-facing downside. The only trade-off is internal: new menu versions m
 - All edits are confined to `public/standalone.html` and a doc update in `.lovable/plan.md`.
 - `public/sw.js` does not need a version bump for this change — no cached assets change.
 - Existing reload-throttle (`illyReloads` in `localStorage`) is preserved as the final safety net.
+
+## Status: implemented
+
+- Step 1: `IDLE_MS` raised to 300000 ms (5 min); smooth scroll; skip if already near top or lightbox open; `window.__illyLastActivity` exposed for cross-module idle checks.
+- Step 2: SW activation now requires page open ≥ 10 min AND idle ≥ 5 min AND no lightbox.
+- Step 3: Hard-error reload requires 2 errors within 60 s, then waits for idle ≥ 60 s with a 5-min give-up window.
+- Step 4: Daily refresh moved to 08:55–09:00 (pre-open) and gated on idle ≥ 5 min.
+- Step 5: `visibilitychange` no longer force-scrolls to top — only resets if idle ≥ 5 min. Lightbox-close + scroll-lock release retained.
