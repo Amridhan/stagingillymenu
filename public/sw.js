@@ -16,7 +16,7 @@
  * IMPORTANT: bump VERSION on every menu/image/content change so kiosks pick
  * up the new assets — otherwise they keep serving the old cached version.
  */
-const VERSION = 'v9';
+const VERSION = 'v10';
 const SHELL_CACHE = 'illy-shell-' + VERSION;
 const IMG_CACHE = 'illy-menu-images-' + VERSION;
 const FONT_CACHE = 'illy-fonts-' + VERSION;
@@ -49,9 +49,11 @@ self.addEventListener('install', (event) => {
       } catch (e) { /* offline at install — will retry on next online fetch */ }
     }));
     // First-ever install (no prior SW) is an exception: there's nothing to
-    // fall back to, so activate anyway. Existing controller -> require a
-    // good shell before swapping.
-    if (shellCached || !self.registration.active) {
+    // fall back to, so activate anyway. With an existing controller we now
+    // WAIT for the page to post {type:'SKIP_WAITING'} during an idle window
+    // (no taps, no open lightbox). This prevents the mid-session blank that
+    // happens when a new SW activates mid-tap. See message handler below.
+    if (!self.registration.active) {
       self.skipWaiting();
     }
   })());
@@ -190,6 +192,10 @@ self.addEventListener('fetch', (event) => {
 // online session — not lazily as the user scrolls.
 self.addEventListener('message', (event) => {
   const data = event.data || {};
+  if (data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
   if (data.type !== 'PRECACHE' || !Array.isArray(data.urls)) return;
   event.waitUntil((async () => {
     const cache = await caches.open(IMG_CACHE);

@@ -7548,6 +7548,12 @@ Accompanied with:
       function oLb(i) {
         var d = ITEMS[i];
         if (!d) return;
+        // Tap-storm guard: ignore card taps while the lightbox open animation
+        // is still running. Cleared by the .lb-panel animationend handler
+        // installed once below. A single tap is never dropped — only 2nd/3rd
+        // taps that land inside the ~200ms lbIn animation window.
+        if (window.__lbBusy) return;
+        window.__lbBusy = true;
         document.getElementById("lb-name").textContent = TC(d.name);
         var lbn = document.getElementById("lb-name");
         lbn.style.fontSize = "24px";
@@ -7597,6 +7603,9 @@ Accompanied with:
         try {
           if (window.__trackLightbox) window.__trackLightbox(d.name, d.sub, i);
         } catch (e) {}
+        // Safety net in case animationend never fires (e.g. animation
+        // disabled by reduced-motion): force-clear after 400ms.
+        setTimeout(function () { window.__lbBusy = false; }, 400);
       }
       function cLb() {
         try {
@@ -7608,6 +7617,9 @@ Accompanied with:
         window.__lbCurrent = null;
         document.getElementById("lb").classList.remove("open");
         document.body.style.overflow = "";
+        // Reset busy flag immediately on close so the next intentional
+        // tap is never dropped.
+        window.__lbBusy = false;
       }
       function cLbBg(e) {
         if (e.target === document.getElementById("lb")) cLb();
@@ -7615,6 +7627,14 @@ Accompanied with:
       document.addEventListener("keydown", function (e) {
         if (e.key === "Escape") cLb();
       });
+      // Clear the tap-storm flag the moment the open animation finishes —
+      // this is the normal/fast path. The 400ms setTimeout above is just
+      // a fallback if the animation event never fires.
+      document.addEventListener("animationend", function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains("lb-panel")) {
+          window.__lbBusy = false;
+        }
+      }, true);
       // ── sTo: instant scroll to element with fixed nav offset ──
       function sTo(id) {
         var el = document.getElementById(id) || document.getElementById("sec_" + id);
@@ -7730,6 +7750,21 @@ Accompanied with:
         resetToTop();
         scheduleIdleCheck();
       });
+
+      // Scroll-lock watchdog: if body has overflow:hidden but no lightbox is
+      // actually open, release the lock. Pure safety net for the wedge case
+      // where state desyncs (e.g. lightbox removed by external cycle but
+      // body.style.overflow was set just before). Invisible when healthy.
+      setInterval(function () {
+        try {
+          if (document.body.style.overflow !== "hidden") return;
+          var lbEl = document.getElementById("lb");
+          if (!lbEl || !lbEl.classList.contains("open")) {
+            document.body.style.overflow = "";
+            window.__lbBusy = false;
+          }
+        } catch (e) {}
+      }, 2000);
 
       /* ===== Analytics tracking =====
    Only the public site (aycillymenu.lovable.app) is tracked.
@@ -7887,6 +7922,11 @@ Accompanied with:
         // are persisted to IDB and replayed on the next 'online' event or load.
         var IDB_NAME = "aycilly.analytics.queue.v1";
         var IDB_STORE = "events";
+        // Bounded-queue limits: prevent unbounded IDB growth on a kiosk that's
+        // offline for days. Both caps are conservative — analytics events are
+        // tiny, but a multi-week offline kiosk shouldn't burn megabytes.
+        var IDB_MAX_ROWS = 2000;
+        var IDB_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
         var _dbPromise = null;
         function openDb() {
           if (_dbPromise) return _dbPromise;
@@ -7899,7 +7939,25 @@ Accompanied with:
                   db.createObjectStore(IDB_STORE, { keyPath: "id", autoIncrement: true });
                 }
               };
-              req.onsuccess = function () { resolve(req.result); };
+              req.onsuccess = function () {
+                var db = req.result;
+                // One-shot startup sweep: drop rows older than IDB_MAX_AGE_MS.
+                try {
+                  var tx = db.transaction(IDB_STORE, "readwrite");
+                  var store = tx.objectStore(IDB_STORE);
+                  var cutoff = Date.now() - IDB_MAX_AGE_MS;
+                  var creq = store.openCursor();
+                  creq.onsuccess = function (ev) {
+                    var cur = ev.target.result;
+                    if (!cur) return;
+                    if (cur.value && typeof cur.value.ts === "number" && cur.value.ts < cutoff) {
+                      cur.delete();
+                    }
+                    cur.continue();
+                  };
+                } catch (e) {}
+                resolve(db);
+              };
               req.onerror = function () { reject(req.error); };
             } catch (e) { reject(e); }
           });
@@ -7909,7 +7967,28 @@ Accompanied with:
           openDb().then(function (db) {
             try {
               var tx = db.transaction(IDB_STORE, "readwrite");
-              tx.objectStore(IDB_STORE).add({ payload: payload, ts: Date.now() });
+              var store = tx.objectStore(IDB_STORE);
+              store.add({ payload: payload, ts: Date.now() });
+              // Enforce row cap: if over IDB_MAX_ROWS, delete oldest entries
+              // (lowest auto-increment ids) until back under the cap.
+              var countReq = store.count();
+              countReq.onsuccess = function () {
+                var over = countReq.result - IDB_MAX_ROWS;
+                if (over <= 0) return;
+                try {
+                  var tx2 = db.transaction(IDB_STORE, "readwrite");
+                  var st2 = tx2.objectStore(IDB_STORE);
+                  var cur2 = st2.openCursor();
+                  var dropped = 0;
+                  cur2.onsuccess = function (ev) {
+                    var c = ev.target.result;
+                    if (!c || dropped >= over) return;
+                    c.delete();
+                    dropped++;
+                    c.continue();
+                  };
+                } catch (_) {}
+              };
             } catch (e) {}
           }).catch(function () {});
         }
@@ -8336,6 +8415,37 @@ Accompanied with:
       });
       // Run again shortly after, once the menu has rendered all <img> tags.
       setTimeout(postPrecache, 3000);
+      // Idle-only SW activation: when a new SW is waiting, only tell it to
+      // skipWaiting after 30s of no user interaction AND no open lightbox.
+      // Prevents mid-session blank when a new menu version lands.
+      var lastInteract = Date.now();
+      ['touchstart','mousedown','scroll','keydown'].forEach(function (evt) {
+        window.addEventListener(evt, function () { lastInteract = Date.now(); }, { passive: true });
+      });
+      function tryActivate() {
+        try {
+          if (!reg.waiting) return;
+          if (Date.now() - lastInteract < 30000) return;
+          var lbEl = document.getElementById('lb');
+          if (lbEl && lbEl.classList.contains('open')) return;
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        } catch (e) {}
+      }
+      reg.addEventListener('updatefound', function () {
+        var nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', function () {
+          if (nw.state === 'installed' && reg.waiting) tryActivate();
+        });
+      });
+      setInterval(tryActivate, 10000);
+      // Auto-reload once the new SW takes over so the page reflects the new shell.
+      var reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (reloaded) return;
+        reloaded = true;
+        location.reload();
+      });
     }).catch(function () { /* noop */ });
   });
 })();
