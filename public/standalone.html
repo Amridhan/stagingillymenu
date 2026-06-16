@@ -8468,11 +8468,14 @@ Accompanied with:
     return true;
   }
   function safeReload(reason){
+    if (reloadScheduled) { return; }
     if (canReload(reason)) {
+      reloadScheduled = true;
       console.warn('[kiosk] reloading:', reason);
       setTimeout(function(){ location.reload(); }, 50);
     }
   }
+  var reloadScheduled = false;
 
   // --- 1. Boot watchdog: no menu tiles after 10s => reload ---
   setTimeout(function(){
@@ -8489,12 +8492,29 @@ Accompanied with:
     errorScheduled = true;
     setTimeout(function(){ safeReload(label); }, 5000);
   }
+  // Promise-rejection noise we should NOT treat as a kiosk crash.
+  // These are normal on flaky/offline networks and would otherwise
+  // burn the reload-credit budget within minutes.
+  function isBenignRejection(reason){
+    if (!reason) return true;
+    try {
+      var msg = (reason && (reason.message || reason.name || String(reason))) || '';
+      if (/fetch|network|load failed|aborted|abort|timeout|NetworkError|TypeError: Failed/i.test(msg)) return true;
+      if (reason.name === 'AbortError' || reason.name === 'TypeError') return true;
+    } catch(e){}
+    return false;
+  }
   window.addEventListener('error', function(ev){
     try { console.error('[kiosk] window.error', ev && (ev.message || ev.error)); } catch(e){}
     onHardError('window-error');
   });
   window.addEventListener('unhandledrejection', function(ev){
     try { console.error('[kiosk] unhandledrejection', ev && ev.reason); } catch(e){}
+    if (isBenignRejection(ev && ev.reason)) {
+      // Swallow the rejection so it doesn't show as "Uncaught (in promise)".
+      try { ev.preventDefault && ev.preventDefault(); } catch(e){}
+      return;
+    }
     onHardError('unhandled-rejection');
   });
 
