@@ -1,51 +1,52 @@
-## Scope (revised — minimal, low-risk)
+# Standalone Kiosk — Phase 1 fixes, build + QC tango
 
-Three changes only. No backend changes. No new dependencies. No touching React/SSR/admin/auth/tracking.
+Execution model: implement one step at a time, verify, then move on. **No core functionality changes** — only safety, scroll, and white-screen guards. All edits localised to `public/standalone.html` and `public/sw.js`.
 
-### 1. Switch OptiSigns devices to `/standalone.html`
+For each step:
+1. Make the edit.
+2. Re-read the affected region to confirm.
+3. QC: load `/standalone.html` in the preview, check console for errors, verify scroll + render still work.
+4. Report pass/fail before moving to the next step.
 
-Config change on OptiSigns side (no code). New URL per device:
-`https://stagingillymenu.lovable.app/standalone.html`
+## Steps
 
-Removes the React + SSR + iframe layers, which are the most likely cause of "worked once then blank" on Android 11 WebView.
+### Step 1 — Release scroll lock on visibility change (fixes stuck-scroll)
+**File:** `standalone.html` ~7701–7706 (visibilitychange handler).
+**Change:** Before `resetToTop()`, call `cLb()` (close lightbox if open) and force `document.body.style.overflow = ''`. Idempotent — no-op when lightbox isn't open.
+**QC:** Open a card popup, switch tab/back, confirm popup closes and page scrolls.
 
-### 2. Bump SW cache version to `v8`
+### Step 2 — Deduplicate event listeners
+**File:** `standalone.html` ~7686–7729.
+**Change:** Remove the duplicate `visibilitychange` block and duplicate touch/mousedown block. Keep one of each.
+**QC:** Confirm scroll-idle reset still works once (not twice). No console errors.
 
-One-line change in `public/sw.js`. Required so today's price/description/image edits propagate to devices already online.
+### Step 3 — Fix `touch-action` blocking horizontal nav swipe
+**File:** `standalone.html` lines 83–86.
+**Change:** Replace `touch-action: pan-y` on `html, body` with `touch-action: manipulation`. The horizontal `.mnav`/`.snav` rails will then accept pan-x. Vertical body scroll unaffected.
+**QC:** Swipe nav tabs horizontally on a narrow viewport; vertical scroll still smooth.
 
-### 3. Add a self-healing layer to `public/standalone.html`
+### Step 4 — Non-blocking Google Fonts (white-screen on offline boot)
+**File:** `standalone.html` lines 15–18.
+**Change:** Convert the stylesheet `<link>` to `rel="preload" as="style" onload="this.rel='stylesheet'"` with a `<noscript>` fallback. Local `@font-face` fallback already in place.
+**QC:** Preview renders normally; throttle to offline in browser tools → page still paints (uses local fonts).
 
-Three tiny guards, all in the kiosk page itself, ~30 lines total:
+### Step 5 — Tame the unhandledrejection auto-reload
+**File:** `standalone.html` ~8475–8500.
+**Change:**
+- In the `unhandledrejection` handler, ignore network errors (`TypeError`, `AbortError`, anything matching `/fetch|network|load failed/i`) — these are normal offline noise, not real crashes.
+- Add a shared `reloadScheduled` flag so the boot watchdog and the error trap can't both schedule a reload (fixes credit double-burn).
+- Wrap the analytics IDB open in a `.catch` so a corrupt store can't bubble up.
+**QC:** Console should show no spurious reload scheduling when the network is offline.
 
-- **Boot watchdog**: if no menu tiles have rendered within 10 seconds of page load, `location.reload()`. Capped at 2 reloads per hour via `localStorage` so a genuinely broken deploy can't loop.
-- **Global error trap**: `window.onerror` + `unhandledrejection` → schedule a reload after 5 seconds. Catches a single bad chunk crashing the page.
-- **Daily refresh at 09:00 local time**: once-per-day reload, gated so it only fires in a narrow window (09:00–09:05) and only once per day via `localStorage` flag. Standard kiosk hygiene — picks up new SW + clears any WebView leak. Skipped on devices that just booted within the same window.
+### Step 6 — Service worker: only `skipWaiting` after precache succeeds
+**File:** `sw.js` install handler + bump `VERSION` to `v9`.
+**Change:** Move `self.skipWaiting()` inside the precache `.then()`. If precache fails, the old SW keeps serving instead of activating an empty one.
+**QC:** Bump version, confirm preview loads, DevTools → Application → Service Worker shows v9 active and precache populated.
 
-## Files touched
+## Out of scope for Phase 1
+Phase 2 cleanup (fetchpriority pruning, `.popup-overlay` consolidation, IDLE_MS rename, IO disconnect, SW `Request`-keyed cache) is deferred until Phase 1 is stable in the field.
 
-- `public/sw.js` — `VERSION = 'v7'` → `'v8'`. Nothing else.
-- `public/standalone.html` — add one `<script>` block at the end with the three guards above.
+## Rollback
+Each step is one localised edit; revert by undoing that single hunk. `VERSION` bump in `sw.js` is the only client-cache-affecting change.
 
-## Risk & rollback
-
-| Change | Risk | Rollback |
-|---|---|---|
-| OptiSigns URL → `/standalone.html` | None — config only | Change URL back |
-| `VERSION` v7 → v8 | None — intended use of the version | Bump again |
-| Watchdog + error trap + 09:00 refresh | Low — worst case a working page reloads once invisibly; caps prevent loops | Delete the script block |
-
-## What I'm explicitly NOT doing
-
-- Per-image retry / placeholder
-- Hidden diagnostics pill
-- Boot beacon to `/api/public/track`
-- SW kill switch / stale-cache eviction
-- Redirect at `/`
-- Anything in `src/routes/`, backend, or SW beyond the version bump
-
-If issues persist after 48h of monitoring, we revisit with real device data.
-
-## After this ships
-
-1. Update OptiSigns URL on every device to `/standalone.html`.
-2. Going forward: every menu edit → bump `VERSION` in `sw.js` (I'll leave a comment reminder above the constant).
+Approve to start with Step 1.

@@ -16,7 +16,7 @@
  * IMPORTANT: bump VERSION on every menu/image/content change so kiosks pick
  * up the new assets — otherwise they keep serving the old cached version.
  */
-const VERSION = 'v8';
+const VERSION = 'v9';
 const SHELL_CACHE = 'illy-shell-' + VERSION;
 const IMG_CACHE = 'illy-menu-images-' + VERSION;
 const FONT_CACHE = 'illy-fonts-' + VERSION;
@@ -31,14 +31,29 @@ self.addEventListener('install', (event) => {
     const cache = await caches.open(SHELL_CACHE);
     // Use no-cors for cross-origin Google Fonts so we still get an opaque
     // response into the cache when the strict CORS preflight isn't set.
+    // Track whether the critical shell (the HTML page itself) actually made
+    // it into the cache. If it didn't (e.g. offline install on first boot),
+    // do NOT call skipWaiting — let the previous SW (if any) keep serving.
+    // Activating an empty SW makes the next navigation render the 503
+    // "Offline and no cached menu available." fallback, which is the most
+    // common white-screen path on kiosks.
+    let shellCached = false;
     await Promise.all(SHELL_URLS.map(async (url) => {
       try {
         const req = new Request(url, { cache: 'reload' });
         const resp = await fetch(req);
-        if (resp && (resp.ok || resp.type === 'opaque')) await cache.put(req, resp.clone());
+        if (resp && (resp.ok || resp.type === 'opaque')) {
+          await cache.put(req, resp.clone());
+          if (url === '/standalone.html') shellCached = true;
+        }
       } catch (e) { /* offline at install — will retry on next online fetch */ }
     }));
-    self.skipWaiting();
+    // First-ever install (no prior SW) is an exception: there's nothing to
+    // fall back to, so activate anyway. Existing controller -> require a
+    // good shell before swapping.
+    if (shellCached || !self.registration.active) {
+      self.skipWaiting();
+    }
   })());
 });
 

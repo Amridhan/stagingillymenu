@@ -12,11 +12,23 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
     <title>illy Caffè — Menu</title>
+    <!-- Non-blocking webfont load. Kiosks with flaky DNS/offline boot would
+         otherwise stall the first paint until the OS TCP timeout. Local
+         @font-face fallbacks below cover the offline path. -->
     <link
+      rel="preload"
+      as="style"
       href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700;800&display=swap"
-      rel="stylesheet"
       crossorigin="anonymous"
+      onload="this.onload=null;this.rel='stylesheet'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700;800&display=swap"
+        rel="stylesheet"
+        crossorigin="anonymous"
+      />
+    </noscript>
     <style>
       @font-face {
         font-family: "Open Sans";
@@ -80,8 +92,11 @@
       }
       html,
       body {
-        -ms-touch-action: pan-y;
-        touch-action: pan-y;
+        /* Allow both vertical body scroll and horizontal pan on inner rails
+           (.mnav/.snav are overflow-x:auto). pan-y blocked horizontal nav
+           swipes on Android WebView. */
+        -ms-touch-action: manipulation;
+        touch-action: manipulation;
         -webkit-overflow-scrolling: touch;
       }
       :root {
@@ -7697,35 +7712,23 @@ Accompanied with:
       // Start on load
       scheduleIdleCheck();
 
-      // Reset on OptiSigns playlist cycle
+      // Reset on OptiSigns playlist cycle.
+      // Also force-close any open lightbox and release the body scroll lock,
+      // otherwise a popup left open across a playlist cycle leaves
+      // `body { overflow: hidden }` in place and the page becomes unscrollable.
       document.addEventListener("visibilitychange", function () {
-        if (!document.hidden) {
-          lastScrollTime = 0;
-          resetToTop();
-        }
-      });
-
-      // set on any touch
-      ["touchstart", "touchend", "mousedown"].forEach(function (evt) {
-        document.addEventListener(
-          evt,
-          function () {
-            scrollChanged = false;
-            scheduleIdleCheck();
-          },
-          { passive: true },
-        );
-      });
-
-      // Start timer on page load
-      scheduleIdleCheck();
-
-      // Reset to top when page becomes visible (OptiSigns playlist cycle)
-      document.addEventListener("visibilitychange", function () {
-        if (!document.hidden) {
-          resetToTop();
-          scheduleIdleCheck();
-        }
+        if (document.hidden) return;
+        try {
+          var lbEl = document.getElementById("lb");
+          if (lbEl && lbEl.classList.contains("open")) {
+            cLb();
+          }
+        } catch (e) {}
+        // Defensive: always release scroll lock on return to foreground.
+        document.body.style.overflow = "";
+        lastScrollTime = 0;
+        resetToTop();
+        scheduleIdleCheck();
       });
 
       /* ===== Analytics tracking =====
@@ -8465,11 +8468,14 @@ Accompanied with:
     return true;
   }
   function safeReload(reason){
+    if (reloadScheduled) { return; }
     if (canReload(reason)) {
+      reloadScheduled = true;
       console.warn('[kiosk] reloading:', reason);
       setTimeout(function(){ location.reload(); }, 50);
     }
   }
+  var reloadScheduled = false;
 
   // --- 1. Boot watchdog: no menu tiles after 10s => reload ---
   setTimeout(function(){
@@ -8486,12 +8492,29 @@ Accompanied with:
     errorScheduled = true;
     setTimeout(function(){ safeReload(label); }, 5000);
   }
+  // Promise-rejection noise we should NOT treat as a kiosk crash.
+  // These are normal on flaky/offline networks and would otherwise
+  // burn the reload-credit budget within minutes.
+  function isBenignRejection(reason){
+    if (!reason) return true;
+    try {
+      var msg = (reason && (reason.message || reason.name || String(reason))) || '';
+      if (/fetch|network|load failed|aborted|abort|timeout|NetworkError|TypeError: Failed/i.test(msg)) return true;
+      if (reason.name === 'AbortError' || reason.name === 'TypeError') return true;
+    } catch(e){}
+    return false;
+  }
   window.addEventListener('error', function(ev){
     try { console.error('[kiosk] window.error', ev && (ev.message || ev.error)); } catch(e){}
     onHardError('window-error');
   });
   window.addEventListener('unhandledrejection', function(ev){
     try { console.error('[kiosk] unhandledrejection', ev && ev.reason); } catch(e){}
+    if (isBenignRejection(ev && ev.reason)) {
+      // Swallow the rejection so it doesn't show as "Uncaught (in promise)".
+      try { ev.preventDefault && ev.preventDefault(); } catch(e){}
+      return;
+    }
     onHardError('unhandled-rejection');
   });
 
