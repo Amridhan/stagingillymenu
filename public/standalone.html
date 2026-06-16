@@ -7548,6 +7548,12 @@ Accompanied with:
       function oLb(i) {
         var d = ITEMS[i];
         if (!d) return;
+        // Tap-storm guard: ignore card taps while the lightbox open animation
+        // is still running. Cleared by the .lb-panel animationend handler
+        // installed once below. A single tap is never dropped — only 2nd/3rd
+        // taps that land inside the ~200ms lbIn animation window.
+        if (window.__lbBusy) return;
+        window.__lbBusy = true;
         document.getElementById("lb-name").textContent = TC(d.name);
         var lbn = document.getElementById("lb-name");
         lbn.style.fontSize = "24px";
@@ -7597,6 +7603,9 @@ Accompanied with:
         try {
           if (window.__trackLightbox) window.__trackLightbox(d.name, d.sub, i);
         } catch (e) {}
+        // Safety net in case animationend never fires (e.g. animation
+        // disabled by reduced-motion): force-clear after 400ms.
+        setTimeout(function () { window.__lbBusy = false; }, 400);
       }
       function cLb() {
         try {
@@ -7608,6 +7617,9 @@ Accompanied with:
         window.__lbCurrent = null;
         document.getElementById("lb").classList.remove("open");
         document.body.style.overflow = "";
+        // Reset busy flag immediately on close so the next intentional
+        // tap is never dropped.
+        window.__lbBusy = false;
       }
       function cLbBg(e) {
         if (e.target === document.getElementById("lb")) cLb();
@@ -7615,6 +7627,14 @@ Accompanied with:
       document.addEventListener("keydown", function (e) {
         if (e.key === "Escape") cLb();
       });
+      // Clear the tap-storm flag the moment the open animation finishes —
+      // this is the normal/fast path. The 400ms setTimeout above is just
+      // a fallback if the animation event never fires.
+      document.addEventListener("animationend", function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains("lb-panel")) {
+          window.__lbBusy = false;
+        }
+      }, true);
       // ── sTo: instant scroll to element with fixed nav offset ──
       function sTo(id) {
         var el = document.getElementById(id) || document.getElementById("sec_" + id);
