@@ -44,6 +44,19 @@ So "clear cache regularly" as a blanket policy would be **counter-productive** �
 - Menu content / image changes → bump `VERSION` in `sw.js`. That's the cache-clear knob. Old caches are auto-deleted on activate.
 - Do NOT instruct staff to "clear cache" on the device — it defeats offline mode.
 
+## Phase 2 status: IMPLEMENTED
+- Step 1 ✅ Animation-tied tap guard (`__lbBusy` flag, cleared on `.lb-panel` animationend, 400ms safety timeout, cleared on close).
+- Step 2 ✅ Scroll-lock watchdog (2s interval; releases stuck `body.overflow:hidden` when no lightbox is open).
+- Step 3 ✅ Idle-only SW activation. `sw.js` bumped to v10; install no longer calls `skipWaiting()` when a controller exists. Page posts `SKIP_WAITING` only after 30s of no interaction AND no open lightbox; controllerchange triggers a one-shot reload.
+- Step 4 ✅ Bounded IDB analytics queue (2000-row cap with oldest-first eviction; 7-day age sweep on db open).
+- Step 5 ✅ Cache policy documented above. Staff should NOT clear app cache — version bumps are the correct lever.
+
+### QC checklist for the device
+1. Tap a card rapidly 5×: only one popup opens, page remains scrollable after close.
+2. Force `document.body.style.overflow='hidden'` in devtools without opening a popup → clears within ~2s.
+3. Bump `VERSION` to v11 later → new SW stays "waiting" until 30s idle, then activates and reloads once.
+4. In devtools: `indexedDB.open('aycilly.analytics.queue.v1')` → events store stays ≤ 2000 rows.
+
 ## Out of scope (deliberately)
 - Brand splash screen (would mask the real issue, not fix it).
 - Generic global tap debounce (would make single taps feel laggy).
