@@ -7751,6 +7751,21 @@ Accompanied with:
         scheduleIdleCheck();
       });
 
+      // Scroll-lock watchdog: if body has overflow:hidden but no lightbox is
+      // actually open, release the lock. Pure safety net for the wedge case
+      // where state desyncs (e.g. lightbox removed by external cycle but
+      // body.style.overflow was set just before). Invisible when healthy.
+      setInterval(function () {
+        try {
+          if (document.body.style.overflow !== "hidden") return;
+          var lbEl = document.getElementById("lb");
+          if (!lbEl || !lbEl.classList.contains("open")) {
+            document.body.style.overflow = "";
+            window.__lbBusy = false;
+          }
+        } catch (e) {}
+      }, 2000);
+
       /* ===== Analytics tracking =====
    Only the public site (aycillymenu.lovable.app) is tracked.
    Tracked events:
