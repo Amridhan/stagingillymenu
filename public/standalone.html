@@ -8415,6 +8415,37 @@ Accompanied with:
       });
       // Run again shortly after, once the menu has rendered all <img> tags.
       setTimeout(postPrecache, 3000);
+      // Idle-only SW activation: when a new SW is waiting, only tell it to
+      // skipWaiting after 30s of no user interaction AND no open lightbox.
+      // Prevents mid-session blank when a new menu version lands.
+      var lastInteract = Date.now();
+      ['touchstart','mousedown','scroll','keydown'].forEach(function (evt) {
+        window.addEventListener(evt, function () { lastInteract = Date.now(); }, { passive: true });
+      });
+      function tryActivate() {
+        try {
+          if (!reg.waiting) return;
+          if (Date.now() - lastInteract < 30000) return;
+          var lbEl = document.getElementById('lb');
+          if (lbEl && lbEl.classList.contains('open')) return;
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        } catch (e) {}
+      }
+      reg.addEventListener('updatefound', function () {
+        var nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', function () {
+          if (nw.state === 'installed' && reg.waiting) tryActivate();
+        });
+      });
+      setInterval(tryActivate, 10000);
+      // Auto-reload once the new SW takes over so the page reflects the new shell.
+      var reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (reloaded) return;
+        reloaded = true;
+        location.reload();
+      });
     }).catch(function () { /* noop */ });
   });
 })();
