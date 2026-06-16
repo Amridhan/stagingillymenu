@@ -7681,23 +7681,38 @@ Accompanied with:
       });
       mnB.classList.add("active");
 
-      // ── IDLE RESET: scroll-based — only resets if no scroll in 60s ──
+      // ── IDLE RESET: only fires after 5 min of true inactivity, gently ──
+      // Customer-perspective: a real guest at the table can pause for several
+      // minutes mid-conversation without the menu jumping under them. Reset
+      // only happens when the kiosk is provably unattended. OptiSigns handles
+      // the longer-idle handoff to other content, so we don't need to be
+      // aggressive here.
       var idleTimer = null;
-      var IDLE_MS = 60000;
+      var IDLE_MS = 300000; // 5 minutes
       var lastScrollTime = Date.now();
+      // Exposed so other modules (SW activation, visibilitychange, error
+      // reload) can ask "is the kiosk currently idle?" without duplicating
+      // the activity-tracking logic.
+      window.__illyLastActivity = Date.now();
 
       function resetToTop() {
         var now = Date.now();
         if (now - lastScrollTime >= IDLE_MS) {
-          window.scrollTo({ top: 0, behavior: "instant" });
-          var sLinks = document.querySelectorAll(".snav a");
-          sLinks.forEach(function (l) {
-            l.classList.remove("active");
-          });
-          var firstSnav = document.querySelector(".snav a");
-          if (firstSnav) firstSnav.classList.add("active");
-          mnB.classList.add("active");
-          mnF.classList.remove("active");
+          // Skip the reset if there's nothing meaningful to tidy or a
+          // lightbox is somehow still open.
+          var lbEl = document.getElementById("lb");
+          var lbOpen = lbEl && lbEl.classList.contains("open");
+          if (!lbOpen && window.scrollY >= 200) {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+            var sLinks = document.querySelectorAll(".snav a");
+            sLinks.forEach(function (l) {
+              l.classList.remove("active");
+            });
+            var firstSnav = document.querySelector(".snav a");
+            if (firstSnav) firstSnav.classList.add("active");
+            mnB.classList.add("active");
+            mnF.classList.remove("active");
+          }
         }
         scheduleIdleCheck();
       }
@@ -7712,6 +7727,7 @@ Accompanied with:
         "scroll",
         function () {
           lastScrollTime = Date.now();
+          window.__illyLastActivity = lastScrollTime;
           scheduleIdleCheck();
         },
         { passive: true },
@@ -7723,6 +7739,7 @@ Accompanied with:
           evt,
           function () {
             lastScrollTime = Date.now();
+            window.__illyLastActivity = lastScrollTime;
             scheduleIdleCheck();
           },
           { passive: true },
@@ -7732,10 +7749,11 @@ Accompanied with:
       // Start on load
       scheduleIdleCheck();
 
-      // Reset on OptiSigns playlist cycle.
-      // Also force-close any open lightbox and release the body scroll lock,
-      // otherwise a popup left open across a playlist cycle leaves
-      // `body { overflow: hidden }` in place and the page becomes unscrollable.
+      // Return-to-foreground (e.g. OptiSigns playlist cycles back to the menu).
+      // Safety steps always run: close a stuck lightbox + release scroll lock.
+      // But we no longer yank scroll to top unconditionally — that would jump
+      // the view from under a customer who is mid-scroll when the tab refocuses.
+      // Only reset if the kiosk was already idle for ≥ IDLE_MS.
       document.addEventListener("visibilitychange", function () {
         if (document.hidden) return;
         try {
@@ -7746,8 +7764,9 @@ Accompanied with:
         } catch (e) {}
         // Defensive: always release scroll lock on return to foreground.
         document.body.style.overflow = "";
-        lastScrollTime = 0;
-        resetToTop();
+        if (Date.now() - lastScrollTime >= IDLE_MS) {
+          resetToTop();
+        }
         scheduleIdleCheck();
       });
 
