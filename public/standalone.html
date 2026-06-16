@@ -12,11 +12,23 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
     <title>illy Caffè — Menu</title>
+    <!-- Non-blocking webfont load. Kiosks with flaky DNS/offline boot would
+         otherwise stall the first paint until the OS TCP timeout. Local
+         @font-face fallbacks below cover the offline path. -->
     <link
+      rel="preload"
+      as="style"
       href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700;800&display=swap"
-      rel="stylesheet"
       crossorigin="anonymous"
+      onload="this.onload=null;this.rel='stylesheet'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700;800&display=swap"
+        rel="stylesheet"
+        crossorigin="anonymous"
+      />
+    </noscript>
     <style>
       @font-face {
         font-family: "Open Sans";
