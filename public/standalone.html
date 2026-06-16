@@ -8621,12 +8621,35 @@ Accompanied with:
     } catch(e){ safeReload('boot-watchdog-exc'); }
   }, 10000);
 
-  // --- 2. Global error trap: schedule a reload 5s after a hard error ---
+  // --- 2. Global error trap: only reload after TWO hard errors within 60s,
+  //        and only when the kiosk is idle. A single stray error is not
+  //        worth a customer-visible page reload.
+  var hardErrorTimes = [];
   var errorScheduled = false;
+  function isKioskIdle(minIdleMs){
+    var last = window.__illyLastActivity || 0;
+    return Date.now() - last >= minIdleMs;
+  }
   function onHardError(label){
+    var now = Date.now();
+    hardErrorTimes = hardErrorTimes.filter(function(t){ return now - t < 60000; });
+    hardErrorTimes.push(now);
+    if (hardErrorTimes.length < 2) return;
     if (errorScheduled) return;
     errorScheduled = true;
-    setTimeout(function(){ safeReload(label); }, 5000);
+    // Defer reload until kiosk is idle ≥60s; re-check every 5s, give up after 5 min.
+    var attempts = 0;
+    (function tryReload(){
+      attempts++;
+      var lbEl = document.getElementById('lb');
+      var lbOpen = lbEl && lbEl.classList.contains('open');
+      if (!lbOpen && isKioskIdle(60000)) {
+        safeReload(label);
+        return;
+      }
+      if (attempts > 60) return; // give up after ~5 min
+      setTimeout(tryReload, 5000);
+    })();
   }
   // Promise-rejection noise we should NOT treat as a kiosk crash.
   // These are normal on flaky/offline networks and would otherwise
@@ -8654,15 +8677,21 @@ Accompanied with:
     onHardError('unhandled-rejection');
   });
 
-  // --- 3. Daily refresh at 09:00 local (window 09:00-09:05), once per day ---
+  // --- 3. Daily pre-open refresh at 08:55 local (window 08:55-09:00),
+  //        once per day. Moved before opening hours so a customer who arrives
+  //        right at 09:00 will never see the page reload under them. Also
+  //        requires kiosk-idle ≥5 min as a final safety.
   var bootTime = Date.now();
   setInterval(function(){
     var d = new Date();
-    if (d.getHours() !== 9 || d.getMinutes() > 5) return;
+    if (d.getHours() !== 8 || d.getMinutes() < 55) return;
     var dayKey = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
     if (lsGet('illyDailyDay', '') === dayKey) return;
     // Skip if we just booted within the same window (avoid immediate reload loop)
     if (Date.now() - bootTime < 6 * 60 * 1000) { lsSet('illyDailyDay', dayKey); return; }
+    // Skip if anyone is interacting (unlikely pre-open, but safety net)
+    var lastAct = window.__illyLastActivity || 0;
+    if (Date.now() - lastAct < 5 * 60 * 1000) return;
     lsSet('illyDailyDay', dayKey);
     safeReload('daily-09:00');
   }, 60 * 1000);
