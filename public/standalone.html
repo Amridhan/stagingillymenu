@@ -80,8 +80,11 @@
       }
       html,
       body {
-        -ms-touch-action: pan-y;
-        touch-action: pan-y;
+        /* Allow both vertical body scroll and horizontal pan on inner rails
+           (.mnav/.snav are overflow-x:auto). pan-y blocked horizontal nav
+           swipes on Android WebView. */
+        -ms-touch-action: manipulation;
+        touch-action: manipulation;
         -webkit-overflow-scrolling: touch;
       }
       :root {
