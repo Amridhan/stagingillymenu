@@ -7681,23 +7681,38 @@ Accompanied with:
       });
       mnB.classList.add("active");
 
-      // ── IDLE RESET: scroll-based — only resets if no scroll in 60s ──
+      // ── IDLE RESET: only fires after 5 min of true inactivity, gently ──
+      // Customer-perspective: a real guest at the table can pause for several
+      // minutes mid-conversation without the menu jumping under them. Reset
+      // only happens when the kiosk is provably unattended. OptiSigns handles
+      // the longer-idle handoff to other content, so we don't need to be
+      // aggressive here.
       var idleTimer = null;
-      var IDLE_MS = 60000;
+      var IDLE_MS = 300000; // 5 minutes
       var lastScrollTime = Date.now();
+      // Exposed so other modules (SW activation, visibilitychange, error
+      // reload) can ask "is the kiosk currently idle?" without duplicating
+      // the activity-tracking logic.
+      window.__illyLastActivity = Date.now();
 
       function resetToTop() {
         var now = Date.now();
         if (now - lastScrollTime >= IDLE_MS) {
-          window.scrollTo({ top: 0, behavior: "instant" });
-          var sLinks = document.querySelectorAll(".snav a");
-          sLinks.forEach(function (l) {
-            l.classList.remove("active");
-          });
-          var firstSnav = document.querySelector(".snav a");
-          if (firstSnav) firstSnav.classList.add("active");
-          mnB.classList.add("active");
-          mnF.classList.remove("active");
+          // Skip the reset if there's nothing meaningful to tidy or a
+          // lightbox is somehow still open.
+          var lbEl = document.getElementById("lb");
+          var lbOpen = lbEl && lbEl.classList.contains("open");
+          if (!lbOpen && window.scrollY >= 200) {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+            var sLinks = document.querySelectorAll(".snav a");
+            sLinks.forEach(function (l) {
+              l.classList.remove("active");
+            });
+            var firstSnav = document.querySelector(".snav a");
+            if (firstSnav) firstSnav.classList.add("active");
+            mnB.classList.add("active");
+            mnF.classList.remove("active");
+          }
         }
         scheduleIdleCheck();
       }
@@ -7712,6 +7727,7 @@ Accompanied with:
         "scroll",
         function () {
           lastScrollTime = Date.now();
+          window.__illyLastActivity = lastScrollTime;
           scheduleIdleCheck();
         },
         { passive: true },
@@ -7723,6 +7739,7 @@ Accompanied with:
           evt,
           function () {
             lastScrollTime = Date.now();
+            window.__illyLastActivity = lastScrollTime;
             scheduleIdleCheck();
           },
           { passive: true },
@@ -7732,10 +7749,11 @@ Accompanied with:
       // Start on load
       scheduleIdleCheck();
 
-      // Reset on OptiSigns playlist cycle.
-      // Also force-close any open lightbox and release the body scroll lock,
-      // otherwise a popup left open across a playlist cycle leaves
-      // `body { overflow: hidden }` in place and the page becomes unscrollable.
+      // Return-to-foreground (e.g. OptiSigns playlist cycles back to the menu).
+      // Safety steps always run: close a stuck lightbox + release scroll lock.
+      // But we no longer yank scroll to top unconditionally — that would jump
+      // the view from under a customer who is mid-scroll when the tab refocuses.
+      // Only reset if the kiosk was already idle for ≥ IDLE_MS.
       document.addEventListener("visibilitychange", function () {
         if (document.hidden) return;
         try {
@@ -7746,8 +7764,9 @@ Accompanied with:
         } catch (e) {}
         // Defensive: always release scroll lock on return to foreground.
         document.body.style.overflow = "";
-        lastScrollTime = 0;
-        resetToTop();
+        if (Date.now() - lastScrollTime >= IDLE_MS) {
+          resetToTop();
+        }
         scheduleIdleCheck();
       });
 
@@ -8415,17 +8434,24 @@ Accompanied with:
       });
       // Run again shortly after, once the menu has rendered all <img> tags.
       setTimeout(postPrecache, 3000);
-      // Idle-only SW activation: when a new SW is waiting, only tell it to
-      // skipWaiting after 30s of no user interaction AND no open lightbox.
-      // Prevents mid-session blank when a new menu version lands.
+      // Idle-only SW activation: only roll a new SW in when the kiosk is
+      // provably unattended. Requirements:
+      //   - page open ≥ 10 min since last load (avoid reload right after one)
+      //   - no user interaction for ≥ 5 min
+      //   - no lightbox open
+      // The 2-reloads-per-hour throttle below is the final safety net.
+      var pageLoadedAt = Date.now();
       var lastInteract = Date.now();
       ['touchstart','mousedown','scroll','keydown'].forEach(function (evt) {
         window.addEventListener(evt, function () { lastInteract = Date.now(); }, { passive: true });
       });
+      var SW_IDLE_MS = 300000;     // 5 min idle
+      var SW_MIN_AGE_MS = 600000;  // 10 min since load
       function tryActivate() {
         try {
           if (!reg.waiting) return;
-          if (Date.now() - lastInteract < 30000) return;
+          if (Date.now() - pageLoadedAt < SW_MIN_AGE_MS) return;
+          if (Date.now() - lastInteract < SW_IDLE_MS) return;
           var lbEl = document.getElementById('lb');
           if (lbEl && lbEl.classList.contains('open')) return;
           reg.waiting.postMessage({ type: 'SKIP_WAITING' });
@@ -8595,12 +8621,35 @@ Accompanied with:
     } catch(e){ safeReload('boot-watchdog-exc'); }
   }, 10000);
 
-  // --- 2. Global error trap: schedule a reload 5s after a hard error ---
+  // --- 2. Global error trap: only reload after TWO hard errors within 60s,
+  //        and only when the kiosk is idle. A single stray error is not
+  //        worth a customer-visible page reload.
+  var hardErrorTimes = [];
   var errorScheduled = false;
+  function isKioskIdle(minIdleMs){
+    var last = window.__illyLastActivity || 0;
+    return Date.now() - last >= minIdleMs;
+  }
   function onHardError(label){
+    var now = Date.now();
+    hardErrorTimes = hardErrorTimes.filter(function(t){ return now - t < 60000; });
+    hardErrorTimes.push(now);
+    if (hardErrorTimes.length < 2) return;
     if (errorScheduled) return;
     errorScheduled = true;
-    setTimeout(function(){ safeReload(label); }, 5000);
+    // Defer reload until kiosk is idle ≥60s; re-check every 5s, give up after 5 min.
+    var attempts = 0;
+    (function tryReload(){
+      attempts++;
+      var lbEl = document.getElementById('lb');
+      var lbOpen = lbEl && lbEl.classList.contains('open');
+      if (!lbOpen && isKioskIdle(60000)) {
+        safeReload(label);
+        return;
+      }
+      if (attempts > 60) return; // give up after ~5 min
+      setTimeout(tryReload, 5000);
+    })();
   }
   // Promise-rejection noise we should NOT treat as a kiosk crash.
   // These are normal on flaky/offline networks and would otherwise
@@ -8628,15 +8677,21 @@ Accompanied with:
     onHardError('unhandled-rejection');
   });
 
-  // --- 3. Daily refresh at 09:00 local (window 09:00-09:05), once per day ---
+  // --- 3. Daily pre-open refresh at 08:55 local (window 08:55-09:00),
+  //        once per day. Moved before opening hours so a customer who arrives
+  //        right at 09:00 will never see the page reload under them. Also
+  //        requires kiosk-idle ≥5 min as a final safety.
   var bootTime = Date.now();
   setInterval(function(){
     var d = new Date();
-    if (d.getHours() !== 9 || d.getMinutes() > 5) return;
+    if (d.getHours() !== 8 || d.getMinutes() < 55) return;
     var dayKey = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
     if (lsGet('illyDailyDay', '') === dayKey) return;
     // Skip if we just booted within the same window (avoid immediate reload loop)
     if (Date.now() - bootTime < 6 * 60 * 1000) { lsSet('illyDailyDay', dayKey); return; }
+    // Skip if anyone is interacting (unlikely pre-open, but safety net)
+    var lastAct = window.__illyLastActivity || 0;
+    if (Date.now() - lastAct < 5 * 60 * 1000) return;
     lsSet('illyDailyDay', dayKey);
     safeReload('daily-09:00');
   }, 60 * 1000);

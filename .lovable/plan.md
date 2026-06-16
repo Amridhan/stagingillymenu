@@ -1,68 +1,98 @@
-# Phase 2 — Kiosk freeze + cache hygiene
+# Phase 3 — Stop "Auto-Load Without Touch"
 
-Same build/QC tango as Phase 1. All edits localised to `public/standalone.html` and `public/sw.js`. No core functionality changes — only interaction-state guards and cache housekeeping.
+## Problem
 
-## On your cache question
+Today the kiosk has **four separate triggers** that can change or reload the screen with zero customer interaction. Any one of them is enough to feel like a glitch when you're sitting at the table.
 
-Short answer: **yes, partially — but not in the "junk accumulating" sense people usually mean.** Walking through what actually lives on a kiosk:
+| # | Trigger | What customer sees | Where it lives |
+|---|---|---|---|
+| 1 | Idle scroll-to-top | Menu silently jumps to top, section pill clears, toggle flips to "Bakery" | `public/standalone.html` ~L7690–7733 |
+| 2 | Service-Worker auto-reload | Full page reload (white flash) after a new deploy | `public/standalone.html` ~L8425–8448 |
+| 3 | Error-triggered reload | Full page reload 5s after any JS error | `public/standalone.html` ~L8598–8629 |
+| 4 | Daily 09:00 refresh | Full page reload between 09:00–09:05 | `public/standalone.html` ~L8631–8642 |
 
-- **Service Worker caches** (`illy-shell-v9`, `illy-menu-images-v9`, `illy-fonts-v9`) — these are *intentional* and the reason the kiosk works offline. They self-prune on every `VERSION` bump (the `activate` handler in `sw.js` already deletes any cache not in the keep-set). Not junk.
-- **WebView HTTP cache** — small, the OS evicts it under memory pressure. Not a real concern.
-- **IndexedDB** (analytics queue in `standalone.html`) — this is the one place actual buildup can happen. If the network is flaky for days, the offline event queue grows. Worth a bounded-size guard.
-- **`localStorage`** — holds `illyReloads` (reload-cap array, max ~5 entries) and a couple of small keys. Negligible.
+OptiSigns already handles the "table has been empty for a while" case by switching away from the menu, so the kiosk itself does **not** need to aggressively reset between sessions.
 
-So "clear cache regularly" as a blanket policy would be **counter-productive** — it would force a full re-download of every menu image on the next boot, which is exactly the cold-start fragility we're trying to avoid. The right move is **targeted hygiene**: cap the analytics queue, and make sure SW version bumps continue to do the heavy lifting when menu content changes.
+## Goal
 
-## Steps
+No customer at the table should ever see the menu move, reload, or change unless they touched it. The only auto-behaviors that remain should fire when the kiosk is provably unattended (long idle window) or outside service hours.
 
-### Step 1 — Animation-tied tap guard on cards
-**File:** `public/standalone.html` — card click/touch handler that opens the lightbox.
-**Change:** Set a `lightboxBusy` flag the moment a card tap fires. Clear it on the *lightbox's own `transitionend`/`animationend`* event (not a fixed timer). While the flag is set, ignore further card taps. No delay added for normal use; only blocks taps that arrive mid-open.
-**Why safe for customers:** a single tap is never dropped. Only the 2nd/3rd tap in a 200–400ms burst is ignored, which is exactly what causes the wedge today.
-**QC:** open card, single tap closes — still instant. Rapid 5-tap test — only one lightbox opens, no scroll-lock left behind.
+## Changes
 
-### Step 2 — Scroll-lock watchdog
-**File:** `public/standalone.html` — alongside the existing visibilitychange handler.
-**Change:** Every 2s, if `document.body.style.overflow === 'hidden'` but no `.lightbox.open` (or equivalent) is in the DOM, clear the overflow. Pure safety net.
-**Why safe for customers:** invisible when things work; rescues the page when they don't.
-**QC:** force the mismatch in devtools (set `body.style.overflow='hidden'`), confirm it self-clears within ~2s.
+### Step 1 — Lengthen the idle reset to ~5 minutes, make it gentle
+File: `public/standalone.html` (`IDLE_MS` and `resetToTop`)
 
-### Step 3 — Defer new SW activation until idle
-**File:** `public/sw.js` + small hook in `standalone.html`.
-**Change:** Remove the unconditional `skipWaiting()` path; instead, when the page detects a waiting SW (`registration.waiting`), it posts `{type:'SKIP_WAITING'}` only after 30s of no interaction *and* no lightbox open. SW listens for that message and calls `skipWaiting()` then.
-**Why safe for customers:** a new menu version still lands, just during a quiet moment instead of mid-tap. Worst case it lands on next cold boot — same as today.
-**QC:** bump VERSION to v10, watch DevTools → Application → Service Workers; new SW stays "waiting" until idle window, then activates cleanly.
+- Set `IDLE_MS` to **300 000 ms (5 minutes)** of true inactivity (no scroll, no touch, no mousedown).
+- Switch `window.scrollTo({top:0, behavior:"instant"})` to `behavior:"smooth"`.
+- Skip the reset entirely if the page is **already** near the top (e.g. `scrollY < 200`) — nothing to tidy.
+- Skip the reset if a lightbox is open.
 
-### Step 4 — Bound the analytics IndexedDB queue
-**File:** `public/standalone.html` — analytics enqueue path.
-**Change:** Cap the offline event store at e.g. 2000 rows. When over cap, drop oldest. Also drop any row older than 7 days on startup.
-**Why safe for customers:** invisible. Just prevents IDB from growing unbounded on a kiosk that's offline for a week.
-**QC:** seed 2500 fake rows in console, reload, confirm count returns to ≤2000 and oldest are gone.
+Outcome: a real customer can pause for several minutes mid-conversation and the menu will still be where they left it. Reset only fires in true unattended state.
 
-### Step 5 — Confirm SW version-bump hygiene is the real cache-clear lever
-**No code change.** Documentation note in `.lovable/plan.md`:
-- Menu content / image changes → bump `VERSION` in `sw.js`. That's the cache-clear knob. Old caches are auto-deleted on activate.
-- Do NOT instruct staff to "clear cache" on the device — it defeats offline mode.
+### Step 2 — Gate the Service-Worker auto-reload behind a long idle window
+File: `public/standalone.html` (`tryActivate` + `controllerchange` handler)
 
-## Phase 2 status: IMPLEMENTED
-- Step 1 ✅ Animation-tied tap guard (`__lbBusy` flag, cleared on `.lb-panel` animationend, 400ms safety timeout, cleared on close).
-- Step 2 ✅ Scroll-lock watchdog (2s interval; releases stuck `body.overflow:hidden` when no lightbox is open).
-- Step 3 ✅ Idle-only SW activation. `sw.js` bumped to v10; install no longer calls `skipWaiting()` when a controller exists. Page posts `SKIP_WAITING` only after 30s of no interaction AND no open lightbox; controllerchange triggers a one-shot reload.
-- Step 4 ✅ Bounded IDB analytics queue (2000-row cap with oldest-first eviction; 7-day age sweep on db open).
-- Step 5 ✅ Cache policy documented above. Staff should NOT clear app cache — version bumps are the correct lever.
+- Require **idle ≥ 5 minutes** (currently 30 s) before activating a waiting SW.
+- Also require: page open for ≥ 10 minutes since last load, and no lightbox open.
+- Keep the existing 2-reloads-per-hour throttle as a final safety net.
 
-### QC checklist for the device
-1. Tap a card rapidly 5×: only one popup opens, page remains scrollable after close.
-2. Force `document.body.style.overflow='hidden'` in devtools without opening a popup → clears within ~2s.
-3. Bump `VERSION` to v11 later → new SW stays "waiting" until 30s idle, then activates and reloads once.
-4. In devtools: `indexedDB.open('aycilly.analytics.queue.v1')` → events store stays ≤ 2000 rows.
+Outcome: a new menu version still rolls out, but only during a quiet window — never mid-session.
 
-## Out of scope (deliberately)
-- Brand splash screen (would mask the real issue, not fix it).
-- Generic global tap debounce (would make single taps feel laggy).
-- Forcing SW updates immediately (causes the mid-session blank you've seen).
+### Step 3 — Tighten the error-triggered reload
+File: `public/standalone.html` (`onHardError` + `unhandledrejection` handler)
 
-## Rollback
-Each step is one localised edit; revert by undoing that hunk. Step 3 also requires reverting the SW message handler.
+- Keep the existing "benign network/abort" filter.
+- Require **two hard errors within 60 s** before scheduling a reload (one stray error is not worth a visible page reload).
+- Require idle ≥ 60 s at the moment the reload would actually fire — defer otherwise.
+- Keep the per-hour reload cap.
 
-Approve to start with Step 1.
+Outcome: transient glitches no longer reload the page in front of a customer.
+
+### Step 4 — Keep the 09:00 daily refresh, narrow the window
+File: `public/standalone.html` (daily refresh interval)
+
+- Keep the once-per-day reload but move it to **08:55–09:00** (before opening) and require idle ≥ 5 min, so it can't fire over a customer who's already at the table at opening.
+
+Outcome: the cache-refresh benefit is preserved; the customer-visible risk drops to ~zero.
+
+### Step 5 — Update the visibilitychange handler so it doesn't yank the view
+File: `public/standalone.html` (`visibilitychange` listener)
+
+- On return-to-foreground: still release the scroll lock and still close a lightbox if one is somehow still open (safety).
+- **Stop** force-resetting scroll to top on every foreground return — only reset if idle ≥ 5 min, matching Step 1.
+
+Outcome: the OptiSigns playlist cycling back to the menu won't visibly jump the page if a customer is mid-scroll.
+
+### Step 6 — Document & QC
+Update `.lovable/plan.md` with the new thresholds and add a short QC list:
+- Scroll halfway, wait 2 min → page stays put.
+- Scroll halfway, wait 5+ min → smooth scroll to top.
+- Force a JS error once → no reload. Force two within 60 s while idle → reload.
+- Deploy a new SW → reload only after 5 min idle.
+
+## Customer-Perspective Summary
+
+| Symptom | Before | After |
+|---|---|---|
+| Menu jumps to top mid-conversation | Possible (short idle) | Only after 5 min of true inactivity, and smoothly |
+| White-flash reload after a deploy | Possible after 30 s idle | Only after 5 min idle + page open ≥ 10 min |
+| Reload after a one-off glitch | Possible after 5 s | Requires 2 errors in 60 s + idle |
+| Lightbox/scroll snap-back on foreground | Every time the tab returns | Only after 5 min idle |
+| 09:00 daily refresh | Customer-visible if early arrival | Moved to pre-open window |
+| Menu/price correctness | Correct | Correct (unchanged) |
+
+No customer-facing downside. The only trade-off is internal: new menu versions may take a little longer to appear on a busy kiosk, which is exactly the trade you asked for.
+
+## Technical notes (for reference)
+
+- All edits are confined to `public/standalone.html` and a doc update in `.lovable/plan.md`.
+- `public/sw.js` does not need a version bump for this change — no cached assets change.
+- Existing reload-throttle (`illyReloads` in `localStorage`) is preserved as the final safety net.
+
+## Status: implemented
+
+- Step 1: `IDLE_MS` raised to 300000 ms (5 min); smooth scroll; skip if already near top or lightbox open; `window.__illyLastActivity` exposed for cross-module idle checks.
+- Step 2: SW activation now requires page open ≥ 10 min AND idle ≥ 5 min AND no lightbox.
+- Step 3: Hard-error reload requires 2 errors within 60 s, then waits for idle ≥ 60 s with a 5-min give-up window.
+- Step 4: Daily refresh moved to 08:55–09:00 (pre-open) and gated on idle ≥ 5 min.
+- Step 5: `visibilitychange` no longer force-scrolls to top — only resets if idle ≥ 5 min. Lightbox-close + scroll-lock release retained.
