@@ -8434,17 +8434,24 @@ Accompanied with:
       });
       // Run again shortly after, once the menu has rendered all <img> tags.
       setTimeout(postPrecache, 3000);
-      // Idle-only SW activation: when a new SW is waiting, only tell it to
-      // skipWaiting after 30s of no user interaction AND no open lightbox.
-      // Prevents mid-session blank when a new menu version lands.
+      // Idle-only SW activation: only roll a new SW in when the kiosk is
+      // provably unattended. Requirements:
+      //   - page open ≥ 10 min since last load (avoid reload right after one)
+      //   - no user interaction for ≥ 5 min
+      //   - no lightbox open
+      // The 2-reloads-per-hour throttle below is the final safety net.
+      var pageLoadedAt = Date.now();
       var lastInteract = Date.now();
       ['touchstart','mousedown','scroll','keydown'].forEach(function (evt) {
         window.addEventListener(evt, function () { lastInteract = Date.now(); }, { passive: true });
       });
+      var SW_IDLE_MS = 300000;     // 5 min idle
+      var SW_MIN_AGE_MS = 600000;  // 10 min since load
       function tryActivate() {
         try {
           if (!reg.waiting) return;
-          if (Date.now() - lastInteract < 30000) return;
+          if (Date.now() - pageLoadedAt < SW_MIN_AGE_MS) return;
+          if (Date.now() - lastInteract < SW_IDLE_MS) return;
           var lbEl = document.getElementById('lb');
           if (lbEl && lbEl.classList.contains('open')) return;
           reg.waiting.postMessage({ type: 'SKIP_WAITING' });
