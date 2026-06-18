@@ -1,28 +1,44 @@
 /* illy menu service worker — full offline cache for the kiosk page.
  *
+ * SCOPE-AWARE VERSION (works at root domain OR sub-folder OR custom domain).
+ *
  * Caches:
- *   - SHELL: /standalone.html (the kiosk page itself) + root navigation
- *   - IMG:   /menu-images/* (product photos)
+ *   - SHELL: the kiosk page itself + root navigation
+ *   - IMG:   menu-images/* (product photos) under the scope
  *   - FONT:  fonts.googleapis.com stylesheet + fonts.gstatic.com font files
  *
  * Strategy:
- *   - Navigations / standalone.html  -> NetworkFirst, fallback to cached HTML
- *   - /menu-images/*                 -> CacheFirst + background revalidate
- *   - Google Fonts                   -> StaleWhileRevalidate
+ *   - Navigations / shell HTML  -> NetworkFirst, fallback to cached HTML
+ *   - menu-images/*             -> CacheFirst + background revalidate
+ *   - Google Fonts              -> StaleWhileRevalidate
  *   - Page can post {type:'PRECACHE', urls:[...]} to warm the image cache
  *
  * Goal: after one online load, the kiosk works fully offline indefinitely.
  *
  * IMPORTANT: bump VERSION on every menu/image/content change so kiosks pick
  * up the new assets — otherwise they keep serving the old cached version.
+ *
+ * Path handling: all path checks use self.registration.scope so this file
+ * works unchanged whether the site is served at https://example.com/ or at
+ * https://user.github.io/project/. See SCOPE constant below.
  */
-const VERSION = 'v10';
+const VERSION = 'v11';
 const SHELL_CACHE = 'illy-shell-' + VERSION;
 const IMG_CACHE = 'illy-menu-images-' + VERSION;
 const FONT_CACHE = 'illy-fonts-' + VERSION;
 
+// SCOPE resolves to the full URL of the directory this SW controls.
+// Examples:
+//   - Lovable:      https://stagingillymenu.lovable.app/
+//   - GitHub Pages: https://amridhan.github.io/stagingillymenu/
+//   - Custom:       https://menu.example.com/
+// All shell/image URL checks below use this as the base.
+const SCOPE = self.registration.scope;
+const SHELL_URL = SCOPE;                       // navigations land on the directory root
+const IMG_PREFIX = SCOPE + 'menu-images/';     // every product photo lives under this
+
 const SHELL_URLS = [
-  '/standalone.html',
+  SHELL_URL,
   'https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700;800&display=swap',
 ];
 
@@ -44,7 +60,7 @@ self.addEventListener('install', (event) => {
         const resp = await fetch(req);
         if (resp && (resp.ok || resp.type === 'opaque')) {
           await cache.put(req, resp.clone());
-          if (url === '/standalone.html') shellCached = true;
+          if (url === SHELL_URL) shellCached = true;
         }
       } catch (e) { /* offline at install — will retry on next online fetch */ }
     }));
@@ -76,9 +92,12 @@ function isSameOrigin(url) {
   catch (e) { return false; }
 }
 function isMenuImage(url) {
+  // True iff the request URL is inside the scope's menu-images/ folder.
+  // Using full-URL prefix match (instead of pathname.startsWith) so this
+  // works correctly when the site is in a sub-folder.
   try {
-    const u = new URL(url);
-    return u.origin === self.location.origin && u.pathname.startsWith('/menu-images/');
+    const href = new URL(url).href;
+    return href.indexOf(IMG_PREFIX) === 0;
   } catch (e) { return false; }
 }
 function isGoogleFont(url) {
@@ -93,10 +112,19 @@ function isCacheableImage(resp) {
   return ct.indexOf('image/') === 0;
 }
 function isShellRequest(req) {
+  // Any navigation (the user typing a URL or clicking a link to this page)
+  // counts as a shell request.
   if (req.mode === 'navigate') return true;
   if (!isSameOrigin(req.url)) return false;
-  const p = new URL(req.url).pathname;
-  return p === '/' || p === '/standalone.html' || p === '/standalone';
+  // Also catch direct GETs to the shell URL itself, the renamed index.html,
+  // or a /standalone or /standalone.html variant that some hosts produce.
+  const href = new URL(req.url).href;
+  return (
+    href === SHELL_URL ||
+    href === SHELL_URL + 'index.html' ||
+    href === SHELL_URL + 'standalone.html' ||
+    href === SHELL_URL + 'standalone'
+  );
 }
 
 self.addEventListener('fetch', (event) => {
@@ -110,13 +138,15 @@ self.addEventListener('fetch', (event) => {
       try {
         const fresh = await fetch(req, { cache: 'no-cache' });
         if (fresh && fresh.ok) {
-          // Always store under /standalone.html so root + standalone share the entry.
-          cache.put('/standalone.html', fresh.clone());
+          // Always store under the canonical SHELL_URL so any future
+          // shell-request variant (root, index.html, standalone.html)
+          // can be served from the same cached entry.
+          cache.put(SHELL_URL, fresh.clone());
           return fresh;
         }
         throw new Error('non-ok shell response');
       } catch (e) {
-        const cached = await cache.match('/standalone.html')
+        const cached = await cache.match(SHELL_URL)
                     || await cache.match(req, { ignoreSearch: true });
         if (cached) return cached;
         return new Response('Offline and no cached menu available.', {
