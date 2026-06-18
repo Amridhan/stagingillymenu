@@ -5588,16 +5588,25 @@ Accompanied with:
     return;
   }
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function (reg) {
+    navigator.serviceWorker.register('sw.js').then(function (reg) {
       function postPrecache() {
         try {
           // Pull from both src (already-loaded images) and data-src (lazy
           // queue) so all 214 menu photos get warmed in the first online
           // session, not just whatever has scrolled into view.
+          // Resolve every path to an ABSOLUTE URL using document.baseURI so
+          // it works whether the page is hosted at the domain root (Lovable)
+          // or in a sub-folder (GitHub Pages project page).
           var urls = [].slice.call(document.querySelectorAll('img'))
             .map(function (i) { return i.getAttribute('data-src') || i.getAttribute('src'); })
-            .filter(function (s) { return s && /^\/?menu-images\//.test(s); })
-            .map(function (s) { return s.charAt(0) === '/' ? s : '/' + s; });
+            .filter(function (s) { return s && /(^|\/)menu-images\//.test(s); })
+            .map(function (s) {
+              // Strip any leading slash so the path is treated as relative to baseURI.
+              var rel = s.replace(/^\/+/, '');
+              try { return new URL(rel, document.baseURI).href; }
+              catch (e) { return null; }
+            })
+            .filter(Boolean);
           var seen = {}; urls = urls.filter(function (u) { if (seen[u]) return false; seen[u]=1; return true; });
           var target = (reg.active || reg.waiting || reg.installing);
           if (target && urls.length) target.postMessage({ type: 'PRECACHE', urls: urls });
