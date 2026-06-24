@@ -137,11 +137,6 @@ function AdminPage() {
   const [allSessions, setSessions] = useState<Session[]>([]);
   const [allEvents, setEvents] = useState<Event[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
-  const [authed, setAuthed] = useState(false);
-  const [authChecking, setAuthChecking] = useState(true);
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginError, setLoginError] = useState<string | null>(null);
-  const [loggingIn, setLoggingIn] = useState(false);
 
   type RangePreset = "24h" | "7d" | "30d" | "90d" | "365d" | "custom";
   const [preset, setPreset] = useState<RangePreset>("30d");
@@ -199,10 +194,6 @@ function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ from, to }),
       });
-      if (r.status === 401) {
-        setAuthed(false);
-        return;
-      }
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Failed");
       setSessions(j.sessions);
@@ -216,52 +207,9 @@ function AdminPage() {
   }
 
   useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch("/api/admin/stats", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: "{}",
-        });
-        if (r.status === 401) {
-          setAuthed(false);
-        } else {
-          setAuthed(true);
-          await load();
-        }
-      } catch {
-        setAuthed(false);
-      } finally {
-        setAuthChecking(false);
-      }
-    })();
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setLoggingIn(true);
-    setLoginError(null);
-    try {
-      const r = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: loginPassword }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        setLoginError(j.error || "Login failed");
-        return;
-      }
-      setLoginPassword("");
-      setAuthed(true);
-      await load();
-    } catch (err) {
-      setLoginError((err as Error).message);
-    } finally {
-      setLoggingIn(false);
-    }
-  }
 
   const { stats, sessions, recentSessions, sessionDuration, sessionDisplayStartedAt } = useMemo(() => {
     const matchesDayFilter = (iso: string) => {
@@ -628,48 +576,6 @@ function AdminPage() {
         : dayFilter === "weekends"
           ? " · weekends only"
           : ` · ${WEEKDAY_LABEL[dayFilter]}s only`;
-
-  if (authChecking) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
-        Loading…
-      </div>
-    );
-  }
-
-  if (!authed) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <form
-          onSubmit={handleLogin}
-          className="w-full max-w-sm space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm"
-        >
-          <div>
-            <h1 className="text-lg font-semibold text-foreground">Admin sign in</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Enter the admin password to view analytics.
-            </p>
-          </div>
-          <input
-            type="password"
-            autoFocus
-            value={loginPassword}
-            onChange={(e) => setLoginPassword(e.target.value)}
-            placeholder="Password"
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
-          />
-          {loginError && <p className="text-sm text-destructive">{loginError}</p>}
-          <button
-            type="submit"
-            disabled={loggingIn || !loginPassword}
-            className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-          >
-            {loggingIn ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background p-6 text-foreground">
