@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/admin-auth";
 
 function admin() {
   return createClient(
@@ -21,8 +20,6 @@ export const Route = createFileRoute("/api/admin/device")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const denied = requireAdmin(request);
-        if (denied) return denied;
         try {
           const body = (await request.json().catch(() => ({}))) as {
             device_id?: string;
