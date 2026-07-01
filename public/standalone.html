@@ -5301,11 +5301,11 @@ Accompanied with:
                 return chain.then(function () {
                   return fetch(ENDPOINT, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "text/plain;charset=UTF-8" },
                     body: JSON.stringify(row.payload),
+                    mode: "no-cors",
                     keepalive: true,
-                  }).then(function (resp) {
-                    if (!resp || !resp.ok) throw new Error("bad status");
+                  }).then(function () {
                     var dtx = db.transaction(IDB_STORE, "readwrite");
                     dtx.objectStore(IDB_STORE).delete(row.id);
                   });
@@ -5316,20 +5316,17 @@ Accompanied with:
         }
         function sendNetwork(payload) {
           var body = JSON.stringify(payload);
-          var sent = false;
-          if (navigator.sendBeacon) {
-            try {
-              var blob = new Blob([body], { type: "text/plain;charset=UTF-8" });
-              sent = navigator.sendBeacon(ENDPOINT, blob);
-            } catch (e) { sent = false; }
-          }
-          if (sent) return Promise.resolve(true);
+          // Google Apps Script redirects on POST + doesn't support CORS preflight.
+          // Use fetch in no-cors mode with text/plain to avoid the preflight entirely.
+          // The response is opaque (can't read status), so we optimistically assume success.
+          // sendBeacon is skipped because it doesn't follow the GAS redirect.
           return fetch(ENDPOINT, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "text/plain;charset=UTF-8" },
             body: body,
+            mode: "no-cors",
             keepalive: true,
-          }).then(function (resp) { return !!(resp && resp.ok); })
+          }).then(function () { return true; })
             .catch(function () { return false; });
         }
         function send(payload) {
