@@ -5303,6 +5303,8 @@ Accompanied with:
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(row.payload),
+                    mode: "cors",
+                    credentials: "omit",
                     keepalive: true,
                   }).then(function (resp) {
                     if (!resp || !resp.ok) throw new Error("bad status");
@@ -5316,18 +5318,15 @@ Accompanied with:
         }
         function sendNetwork(payload) {
           var body = JSON.stringify(payload);
-          var sent = false;
-          if (navigator.sendBeacon) {
-            try {
-              var blob = new Blob([body], { type: "application/json" });
-              sent = navigator.sendBeacon(ENDPOINT, blob);
-            } catch (e) { sent = false; }
-          }
-          if (sent) return Promise.resolve(true);
+          // Skip sendBeacon — it sends credentials by default which fails CORS
+          // preflight against Pipedream's Access-Control-Allow-Origin: *.
+          // Use fetch with explicit credentials: 'omit' + mode: 'cors'.
           return fetch(ENDPOINT, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: body,
+            mode: "cors",
+            credentials: "omit",
             keepalive: true,
           }).then(function (resp) { return !!(resp && resp.ok); })
             .catch(function () { return false; });
