@@ -5144,7 +5144,7 @@ Accompanied with:
           /^id-preview--/.test(h);
         if (isLocal || isPreview) return;
 
-        var ENDPOINT = "https://eodk2nf6ty0hvwu.m.pipedream.net";
+        var ENDPOINT = "/api/public/track";
         var DEVICE_KEY = "aycilly.analytics.device.v1";
         var sessionId = null;
         var deviceId = null;
@@ -5303,8 +5303,6 @@ Accompanied with:
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(row.payload),
-                    mode: "cors",
-                    credentials: "omit",
                     keepalive: true,
                   }).then(function (resp) {
                     if (!resp || !resp.ok) throw new Error("bad status");
@@ -5318,15 +5316,18 @@ Accompanied with:
         }
         function sendNetwork(payload) {
           var body = JSON.stringify(payload);
-          // Skip sendBeacon — it sends credentials by default which fails CORS
-          // preflight against Pipedream's Access-Control-Allow-Origin: *.
-          // Use fetch with explicit credentials: 'omit' + mode: 'cors'.
+          var sent = false;
+          if (navigator.sendBeacon) {
+            try {
+              var blob = new Blob([body], { type: "text/plain;charset=UTF-8" });
+              sent = navigator.sendBeacon(ENDPOINT, blob);
+            } catch (e) { sent = false; }
+          }
+          if (sent) return Promise.resolve(true);
           return fetch(ENDPOINT, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: body,
-            mode: "cors",
-            credentials: "omit",
             keepalive: true,
           }).then(function (resp) { return !!(resp && resp.ok); })
             .catch(function () { return false; });
