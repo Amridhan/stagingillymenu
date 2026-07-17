@@ -22,7 +22,7 @@
  * works unchanged whether the site is served at https://example.com/ or at
  * https://user.github.io/project/. See SCOPE constant below.
  */
-const VERSION = 'v19';
+const VERSION = 'v20';
 const SHELL_CACHE = 'illy-shell-' + VERSION;
 const IMG_CACHE = 'illy-menu-images-' + VERSION;
 const FONT_CACHE = 'illy-fonts-' + VERSION;
